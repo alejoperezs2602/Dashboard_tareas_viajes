@@ -1,0 +1,147 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700;900&display=swap');
+@import "tailwindcss";
+@import 'leaflet/dist/leaflet.css';
+
+@layer base {
+  body {
+    background-color: #0b0a15; /* Deep Galaxy Void */
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(17, 24, 60, 1) 0, transparent 60%), 
+      radial-gradient(at 100% 100%, rgba(30, 10, 40, 1) 0, transparent 60%);
+    background-attachment: fixed;
+    color: #ffffff;
+    min-height: 100vh;
+    font-family: 'Outfit', sans-serif;
+    overflow-x: hidden;
+  }
+}
+
+/* Custom scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(255,255,255,0.5);
+  border-radius: 10px;
+  backdrop-filter: blur(4px);
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255,255,255,0.8);
+}
+
+@keyframes blob {
+  0% { transform: translate(0px, 0px) scale(1) rotate(0deg); }
+  33% { transform: translate(40px, -60px) scale(1.1) rotate(10deg); }
+  66% { transform: translate(-30px, 30px) scale(0.9) rotate(-10deg); }
+  100% { transform: translate(0px, 0px) scale(1) rotate(0deg); }
+}
+
+.animate-blob {
+  animation: blob 15s infinite alternate cubic-bezier(0.4, 0, 0.2, 1);
+}
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+.animation-delay-4000 {
+  animation-delay: 4s;
+}
+
+@layer utilities {
+  .glass-panel {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.01) 100%);
+    backdrop-filter: blur(40px) saturate(180%);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 
+      0 30px 60px -12px rgba(0, 0, 0, 0.8), 
+      inset 0 1px 2px rgba(255, 255, 255, 0.3), 
+      inset 0 -1px 2px rgba(255, 255, 255, 0.05);
+    position: relative;
+    border-radius: 2rem;
+  }
+
+  /* Glare effect for premium glass */
+  .glass-panel::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(105deg, transparent 20%, rgba(255,255,255,0.06) 25%, transparent 30%);
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .glass-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: url('data:image/svg+xml;utf8,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><filter id="noiseFilter"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23noiseFilter)"/></svg>');
+    opacity: 0.03; /* Lower opacity for dark mode */
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  .inner-depth {
+    background: rgba(2, 6, 23, 0.6); /* Slate 950 translucent */
+    box-shadow: inset 0 4px 10px rgba(0, 0, 0, 0.5), 0 1px 1px rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.03);
+  }
+
+  .table-row-glass {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+}
+
+/* LIGHT MODE OVERRIDES */
+body.light-mode {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+body.light-mode .glass-panel {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
+}
+
+body.light-mode .text-slate-100, 
+body.light-mode .text-slate-200 { 
+  color: #0f172a; 
+}
+body.light-mode .text-slate-300 { color: #334155; }
+body.light-mode .text-slate-400 { color: #475569; }
+body.light-mode .text-slate-500 { color: #64748b; }
+
+body.light-mode .bg-slate-800,
+body.light-mode .bg-slate-800\/50,
+body.light-mode .bg-slate-800\/80 { 
+  background-color: rgba(255, 255, 255, 0.8); 
+}
+body.light-mode .bg-slate-900 { background-color: #f8fafc; }
+
+body.light-mode .border-white\/10 { border-color: rgba(0,0,0,0.1); }
+body.light-mode .border-white\/20 { border-color: rgba(0,0,0,0.2); }
+body.light-mode .border-white\/50 { border-color: rgba(0,0,0,0.3); }
+
+body.light-mode .table-row-glass:hover {
+  background: rgba(0, 0, 0, 0.03);
+  box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+}
+
+body.light-mode ::before.noise {
+  opacity: 0.02;
+}
+
+/* Fix inputs and selects in light mode */
+body.light-mode select option {
+  background-color: #ffffff;
+  color: #0f172a;
+}
