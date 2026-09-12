@@ -29,15 +29,24 @@ ChartJS.register(
   Filler
 );
 
-ChartJS.defaults.color = '#cbd5e1';
-ChartJS.defaults.borderColor = 'rgba(255, 255, 255, 0.1)';
+function getCSSVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function applyChartTheme() {
+  ChartJS.defaults.color = getCSSVar('--chart-text') || '#cbd5e1';
+  ChartJS.defaults.borderColor = getCSSVar('--chart-border') || 'rgba(255,255,255,0.1)';
+}
+
+applyChartTheme();
 
 export default function IndividualDashboard({ allTrips, filters, setFilters, telemetryData = [] }) {
   useEffect(() => {
-    const isLight = document.body.classList.contains('light-mode');
-    ChartJS.defaults.color = isLight ? '#334155' : '#cbd5e1';
-    ChartJS.defaults.borderColor = isLight ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.1)';
-  });
+    applyChartTheme();
+    const observer = new MutationObserver(applyChartTheme);
+    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
   const { ruta: filterRuta, conductor: filterConductor, interno: filterInterno, viajeIndex: selectedTripIndex } = filters;
 
   const updateFilter = (key, val) => {

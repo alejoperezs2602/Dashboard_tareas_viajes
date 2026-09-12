@@ -2,77 +2,124 @@
 @import "tailwindcss";
 @import 'leaflet/dist/leaflet.css';
 
+/* ============================================================
+   CSS CUSTOM PROPERTIES — DESIGN TOKENS
+   Cambiar aquí actualiza toda la app automáticamente.
+   ============================================================ */
+:root {
+  /* Fondos */
+  --color-bg-base: #0b0a15;
+  --color-bg-panel: rgba(255, 255, 255, 0.06);
+  --color-bg-inner: rgba(2, 6, 23, 0.6);
+  --color-bg-input: rgba(255, 255, 255, 0.05);
+  --color-bg-hover: rgba(255, 255, 255, 0.08);
+
+  /* Textos */
+  --color-text-primary:   #f1f5f9;  /* slate-100 */
+  --color-text-secondary: #cbd5e1;  /* slate-300 */
+  --color-text-muted:     #94a3b8;  /* slate-400 */
+  --color-text-faint:     #64748b;  /* slate-500 */
+
+  /* Bordes */
+  --color-border:       rgba(255, 255, 255, 0.12);
+  --color-border-light: rgba(255, 255, 255, 0.06);
+
+  /* Glass panel */
+  --glass-bg: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.01) 100%);
+  --glass-border: rgba(255, 255, 255, 0.15);
+  --glass-shadow: 0 30px 60px -12px rgba(0,0,0,0.8), inset 0 1px 2px rgba(255,255,255,0.3), inset 0 -1px 2px rgba(255,255,255,0.05);
+  --glass-glare: linear-gradient(105deg, transparent 20%, rgba(255,255,255,0.06) 25%, transparent 30%);
+
+  /* Scrollbar */
+  --scrollbar-thumb: rgba(255,255,255,0.3);
+  --scrollbar-thumb-hover: rgba(255,255,255,0.6);
+
+  /* Charts */
+  --chart-text: #cbd5e1;
+  --chart-border: rgba(255,255,255,0.1);
+  --chart-tooltip-bg: rgba(15,23,42,0.95);
+  --chart-tooltip-text: #f1f5f9;
+}
+
+/* ============================================================
+   LIGHT MODE — Sobrescribe SOLO los tokens
+   ============================================================ */
+body.light-mode {
+  --color-bg-base:  #eef2f7;
+  --color-bg-panel: rgba(255, 255, 255, 0.75);
+  --color-bg-inner: rgba(241, 245, 249, 0.9);
+  --color-bg-input: rgba(0, 0, 0, 0.04);
+  --color-bg-hover: rgba(0, 0, 0, 0.05);
+
+  --color-text-primary:   #0f172a;
+  --color-text-secondary: #1e293b;
+  --color-text-muted:     #334155;
+  --color-text-faint:     #64748b;
+
+  --color-border:       rgba(0, 0, 0, 0.1);
+  --color-border-light: rgba(0, 0, 0, 0.05);
+
+  --glass-bg: linear-gradient(135deg, rgba(255,255,255,0.85) 0%, rgba(248,250,252,0.7) 100%);
+  --glass-border: rgba(0, 0, 0, 0.1);
+  --glass-shadow: 0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.9);
+  --glass-glare: linear-gradient(105deg, transparent 20%, rgba(255,255,255,0.5) 25%, transparent 30%);
+
+  --scrollbar-thumb: rgba(0,0,0,0.2);
+  --scrollbar-thumb-hover: rgba(0,0,0,0.4);
+
+  --chart-text: #334155;
+  --chart-border: rgba(0,0,0,0.08);
+  --chart-tooltip-bg: rgba(255,255,255,0.97);
+  --chart-tooltip-text: #0f172a;
+}
+
+/* ============================================================
+   BASE STYLES
+   ============================================================ */
 @layer base {
   body {
-    background-color: #0b0a15; /* Deep Galaxy Void */
-    background-image: 
-      radial-gradient(at 0% 0%, rgba(17, 24, 60, 1) 0, transparent 60%), 
+    background-color: var(--color-bg-base);
+    background-image:
+      radial-gradient(at 0% 0%, rgba(17, 24, 60, 1) 0, transparent 60%),
       radial-gradient(at 100% 100%, rgba(30, 10, 40, 1) 0, transparent 60%);
     background-attachment: fixed;
-    color: #ffffff;
+    color: var(--color-text-primary);
     min-height: 100vh;
     font-family: 'Outfit', sans-serif;
     overflow-x: hidden;
+    transition: background-color 0.4s ease, color 0.3s ease;
+  }
+
+  body.light-mode {
+    background-image:
+      radial-gradient(at 0% 0%, rgba(219, 234, 254, 0.8) 0, transparent 60%),
+      radial-gradient(at 100% 100%, rgba(237, 233, 254, 0.8) 0, transparent 60%);
   }
 }
 
-/* Custom scrollbar */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: rgba(255,255,255,0.5);
-  border-radius: 10px;
-  backdrop-filter: blur(4px);
-}
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255,255,255,0.8);
-}
-
-@keyframes blob {
-  0% { transform: translate(0px, 0px) scale(1) rotate(0deg); }
-  33% { transform: translate(40px, -60px) scale(1.1) rotate(10deg); }
-  66% { transform: translate(-30px, 30px) scale(0.9) rotate(-10deg); }
-  100% { transform: translate(0px, 0px) scale(1) rotate(0deg); }
-}
-
-.animate-blob {
-  animation: blob 15s infinite alternate cubic-bezier(0.4, 0, 0.2, 1);
-}
-.animation-delay-2000 {
-  animation-delay: 2s;
-}
-.animation-delay-4000 {
-  animation-delay: 4s;
-}
-
+/* ============================================================
+   GLASS PANEL — Usa tokens
+   ============================================================ */
 @layer utilities {
   .glass-panel {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.01) 100%);
+    background: var(--glass-bg);
     backdrop-filter: blur(40px) saturate(180%);
     -webkit-backdrop-filter: blur(40px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    box-shadow: 
-      0 30px 60px -12px rgba(0, 0, 0, 0.8), 
-      inset 0 1px 2px rgba(255, 255, 255, 0.3), 
-      inset 0 -1px 2px rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
     position: relative;
     border-radius: 2rem;
+    transition: background 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
   }
 
-  /* Glare effect for premium glass */
   .glass-panel::after {
     content: "";
     position: absolute;
     inset: 0;
     border-radius: inherit;
-    background: linear-gradient(105deg, transparent 20%, rgba(255,255,255,0.06) 25%, transparent 30%);
+    background: var(--glass-glare);
     pointer-events: none;
-    z-index: 10;
+    z-index: 1;
   }
 
   .glass-panel::before {
@@ -81,67 +128,173 @@
     inset: 0;
     border-radius: inherit;
     background: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-    opacity: 0.03; /* Lower opacity for dark mode */
+    opacity: 0.025;
     pointer-events: none;
-    z-index: -1;
+    z-index: 0;
   }
 
+  /* Profundidad interior */
   .inner-depth {
-    background: rgba(2, 6, 23, 0.6); /* Slate 950 translucent */
-    box-shadow: inset 0 4px 10px rgba(0, 0, 0, 0.5), 0 1px 1px rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.03);
+    background: var(--color-bg-inner);
+    box-shadow: inset 0 4px 10px rgba(0, 0, 0, 0.15), 0 1px 1px rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--color-border-light);
+    transition: background 0.3s ease;
   }
 
+  /* Filas de tabla con glass */
   .table-row-glass {
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--color-border-light);
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.05);
+    transition: background 0.2s ease;
+  }
+  .table-row-glass:hover {
+    background: var(--color-bg-hover);
   }
 }
 
-/* LIGHT MODE OVERRIDES */
-body.light-mode {
-  background-color: #f1f5f9;
-  color: #0f172a;
+/* ============================================================
+   SEMANTIC UTILITY CLASSES — reemplazas colores hardcodeados
+   ============================================================ */
+.text-primary   { color: var(--color-text-primary); }
+.text-secondary { color: var(--color-text-secondary); }
+.text-muted     { color: var(--color-text-muted); }
+.text-faint     { color: var(--color-text-faint); }
+
+.bg-panel  { background-color: var(--color-bg-panel); }
+.bg-input  { background: var(--color-bg-input); }
+.border-subtle { border-color: var(--color-border); }
+
+/* ============================================================
+   LIGHT MODE — SOBRESCRIBIR TAILWIND HARDCODEADOS
+   Esto atrapa los textos que los componentes declaran en línea.
+   ============================================================ */
+
+/* Textos oscuros para modo claro */
+body.light-mode .text-slate-100,
+body.light-mode .text-slate-200,
+body.light-mode .text-white {
+  color: var(--color-text-primary) !important;
+}
+body.light-mode .text-slate-300 {
+  color: var(--color-text-secondary) !important;
+}
+body.light-mode .text-slate-400 {
+  color: var(--color-text-muted) !important;
+}
+body.light-mode .text-slate-500 {
+  color: var(--color-text-faint) !important;
 }
 
-body.light-mode .glass-panel {
-  background: rgba(255, 255, 255, 0.7);
-  border-color: rgba(0, 0, 0, 0.1);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
+/* Fondos */
+body.light-mode .bg-black\/20,
+body.light-mode .bg-black\/30,
+body.light-mode .bg-black\/40 {
+  background-color: rgba(0, 0, 0, 0.04) !important;
 }
-
-body.light-mode .text-slate-100, 
-body.light-mode .text-slate-200 { 
-  color: #0f172a; 
+body.light-mode .bg-white\/5,
+body.light-mode .bg-white\/10 {
+  background-color: rgba(0, 0, 0, 0.05) !important;
 }
-body.light-mode .text-slate-300 { color: #334155; }
-body.light-mode .text-slate-400 { color: #475569; }
-body.light-mode .text-slate-500 { color: #64748b; }
-
 body.light-mode .bg-slate-800,
 body.light-mode .bg-slate-800\/50,
-body.light-mode .bg-slate-800\/80 { 
-  background-color: rgba(255, 255, 255, 0.8); 
+body.light-mode .bg-slate-800\/80,
+body.light-mode .bg-slate-800\/90 {
+  background-color: rgba(248, 250, 252, 0.95) !important;
 }
-body.light-mode .bg-slate-900 { background-color: #f8fafc; }
-
-body.light-mode .border-white\/10 { border-color: rgba(0,0,0,0.1); }
-body.light-mode .border-white\/20 { border-color: rgba(0,0,0,0.2); }
-body.light-mode .border-white\/50 { border-color: rgba(0,0,0,0.3); }
-
-body.light-mode .table-row-glass:hover {
-  background: rgba(0, 0, 0, 0.03);
-  box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+body.light-mode .bg-slate-900,
+body.light-mode .bg-slate-900\/60 {
+  background-color: rgba(241, 245, 249, 0.95) !important;
 }
 
-body.light-mode .glass-panel::before {
-  opacity: 0.02;
+/* Bordes */
+body.light-mode .border-white\/5,
+body.light-mode .border-white\/10 {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+body.light-mode .border-white\/20 {
+  border-color: rgba(0, 0, 0, 0.12) !important;
 }
 
-/* Fix inputs and selects in light mode */
+/* Input / Select de filtros */
+body.light-mode input[type="date"],
+body.light-mode select {
+  color: var(--color-text-primary) !important;
+  color-scheme: light;
+}
 body.light-mode select option {
   background-color: #ffffff;
   color: #0f172a;
 }
+
+/* Icono de stat card en modo claro */
+body.light-mode .bg-white\/10 {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Command palette backdrop */
+body.light-mode .bg-slate-900\/60 {
+  background-color: rgba(15, 23, 42, 0.4) !important;
+}
+
+/* Badge pills y chips */
+body.light-mode .text-slate-300\/80 {
+  color: rgba(51, 65, 85, 0.9) !important;
+}
+
+/* Dropdown arrow + placeholder */
+body.light-mode ::placeholder {
+  color: rgba(100, 116, 139, 0.7) !important;
+}
+
+/* Marcadores "·" en tablas */
+body.light-mode .text-slate-600 {
+  color: #334155 !important;
+}
+
+/* Blobs en light mode: más suaves y de colores más claros */
+body.light-mode .bg-cyan-500\/40 {
+  background-color: rgba(6, 182, 212, 0.15) !important;
+}
+body.light-mode .bg-fuchsia-600\/40 {
+  background-color: rgba(192, 132, 252, 0.15) !important;
+}
+body.light-mode .bg-indigo-600\/40 {
+  background-color: rgba(99, 102, 241, 0.15) !important;
+}
+
+/* ============================================================
+   SCROLLBAR
+   ============================================================ */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+/* ============================================================
+   BLOB ANIMATION
+   ============================================================ */
+@keyframes blob {
+  0%   { transform: translate(0px, 0px) scale(1) rotate(0deg); }
+  33%  { transform: translate(40px, -60px) scale(1.1) rotate(10deg); }
+  66%  { transform: translate(-30px, 30px) scale(0.9) rotate(-10deg); }
+  100% { transform: translate(0px, 0px) scale(1) rotate(0deg); }
+}
+
+.animate-blob {
+  animation: blob 15s infinite alternate cubic-bezier(0.4, 0, 0.2, 1);
+}
+.animation-delay-2000 { animation-delay: 2s; }
+.animation-delay-4000 { animation-delay: 4s; }

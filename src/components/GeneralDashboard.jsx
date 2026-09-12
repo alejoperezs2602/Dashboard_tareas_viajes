@@ -28,15 +28,24 @@ ChartJS.register(
   ArcElement
 );
 
-ChartJS.defaults.color = '#cbd5e1';
-ChartJS.defaults.borderColor = 'rgba(255, 255, 255, 0.1)';
+function getCSSVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function applyChartTheme() {
+  ChartJS.defaults.color = getCSSVar('--chart-text') || '#cbd5e1';
+  ChartJS.defaults.borderColor = getCSSVar('--chart-border') || 'rgba(255,255,255,0.1)';
+}
+
+applyChartTheme();
 
 export default function GeneralDashboard({ allTrips, onDrillDown, telemetryData = [] }) {
   useEffect(() => {
-    const isLight = document.body.classList.contains('light-mode');
-    ChartJS.defaults.color = isLight ? '#334155' : '#cbd5e1';
-    ChartJS.defaults.borderColor = isLight ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.1)';
-  });
+    applyChartTheme();
+    const observer = new MutationObserver(applyChartTheme);
+    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
   const [vehiculoViewMode, setVehiculoViewMode] = useState('TOP10'); // TOP10, ALL, SINGLE
   const [selectedVehiculo, setSelectedVehiculo] = useState('');
 
