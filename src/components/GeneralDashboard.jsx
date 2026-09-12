@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { parseCustomDate } from '../utils/dateUtils.js';
 import { PUNCTUALITY_TOLERANCE_MIN, RISK_DELAY_THRESHOLD, RISK_SPEED_THRESHOLD, TOP_N_DEFAULT } from '../constants/index.js';
 import SmartAlerts from './SmartAlerts';
+import SmartInsights from './SmartInsights';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -696,6 +697,8 @@ export default function GeneralDashboard({ allTrips, onDrillDown, telemetryData 
           </div>
         </div>
       </div>
+      {/* Síntesis de IA */}
+      <SmartInsights allTrips={allTrips} telemetryData={telemetryData} />
     </div>
   );
 }

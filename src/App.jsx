@@ -13,11 +13,13 @@ import Tilt from 'react-parallax-tilt';
 import LoadingSpinner from './components/ui/LoadingSpinner.jsx';
 import ErrorBanner from './components/ui/ErrorBanner.jsx';
 import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB } from './constants/index.js';
+import CommandPalette from './components/CommandPalette';
 
 function App() {
   const [allTrips, setAllTrips] = useState([]);
   const [telemetryData, setTelemetryData] = useState([]);
   const [activeTab, setActiveTab] = useState('general');
+  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isLightMode, setIsLightMode] = useState(() => {
@@ -184,6 +186,26 @@ function App() {
       return;
     }
     generateReport(allTrips, telemetryData);
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsPaletteOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const paletteActions = {
+    goToGeneral: () => setActiveTab('general'),
+    goToVehicles: () => setActiveTab('individual'),
+    goToTelemetry: () => setActiveTab('telemetry'),
+    exportPDF: () => handleExportPDF(),
+    toggleTheme: () => setIsLightMode(!isLightMode),
+    clearData: () => handleClearData()
   };
 
   return (
@@ -392,6 +414,12 @@ function App() {
           </motion.div>
         )}
       </div>
+
+      <CommandPalette 
+        isOpen={isPaletteOpen} 
+        onClose={() => setIsPaletteOpen(false)} 
+        actions={paletteActions} 
+      />
     </div>
   );
 }
