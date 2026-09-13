@@ -249,7 +249,7 @@ function App() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                     </svg>
                   </span>
-                  <span className="relative z-10 tracking-wide">Data Tiempos</span>
+                  <span className="relative z-10 tracking-wide">Tareas y Viajes</span>
                   <input 
                     type="file" 
                     accept=".xlsx, .xls" 
@@ -265,7 +265,7 @@ function App() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
                     </svg>
                   </span>
-                  <span className="relative z-10 tracking-wide">Data Telemetría GPS</span>
+                  <span className="relative z-10 tracking-wide">Velocidad Excesiva</span>
                   <input 
                     type="file" 
                     accept=".xlsx, .xls" 
@@ -278,25 +278,25 @@ function App() {
             <div className="relative z-10 w-full md:w-auto flex flex-col sm:flex-row gap-3 mt-4 md:mt-0">
                 {allTrips.length > 0 && (
                   <>
-                    <button
+                    <button 
                       onClick={handleExportPDF}
-                      className="group relative flex items-center justify-center cursor-pointer bg-white/5 backdrop-blur-2xl text-white font-extrabold py-3 px-6 rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.2),inset_0_1px_1px_rgba(255,255,255,0.2)] transition-all hover:shadow-[0_0_40px_rgba(16,185,129,0.6),inset_0_1px_1px_rgba(255,255,255,0.4)] hover:-translate-y-1 active:translate-y-0 border border-emerald-400/30 hover:border-emerald-400/80 overflow-hidden text-sm"
+                      className="group relative flex items-center justify-center bg-white/5 backdrop-blur-2xl text-white font-extrabold py-3 px-6 rounded-2xl shadow-[0_0_20px_rgba(255,255,255,0.05),inset_0_1px_1px_rgba(255,255,255,0.2)] transition-all hover:shadow-[0_0_30px_rgba(255,255,255,0.2),inset_0_1px_1px_rgba(255,255,255,0.4)] hover:-translate-y-1 active:translate-y-0 border border-white/20 hover:border-white/50 overflow-hidden text-sm"
                     >
-                      <span className="absolute inset-0 bg-emerald-400/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></span>
+                      <span className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></span>
                       <span className="mr-2 relative z-10">
-                        <svg className="w-5 h-5 text-emerald-300 drop-shadow-[0_0_8px_rgba(52,211,153,0.8)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        <svg className="w-5 h-5 text-slate-200 drop-shadow-md" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
                         </svg>
                       </span>
                       <span className="relative z-10 tracking-wide">Exportar PDF</span>
                     </button>
-                    <button
+                    <button 
                       onClick={handleClearData}
-                      className="group relative flex items-center justify-center cursor-pointer bg-white/5 backdrop-blur-2xl text-white font-extrabold py-3 px-6 rounded-2xl shadow-[0_0_20px_rgba(239,68,68,0.15),inset_0_1px_1px_rgba(255,255,255,0.2)] transition-all hover:shadow-[0_0_40px_rgba(239,68,68,0.4),inset_0_1px_1px_rgba(255,255,255,0.4)] hover:-translate-y-1 active:translate-y-0 border border-red-400/30 hover:border-red-400/80 overflow-hidden text-sm"
+                      className="group relative flex items-center justify-center bg-rose-500/10 backdrop-blur-2xl text-white font-extrabold py-3 px-6 rounded-2xl shadow-[0_0_20px_rgba(244,63,94,0.1),inset_0_1px_1px_rgba(255,255,255,0.1)] transition-all hover:shadow-[0_0_40px_rgba(244,63,94,0.4),inset_0_1px_1px_rgba(255,255,255,0.3)] hover:-translate-y-1 active:translate-y-0 border border-rose-500/30 hover:border-rose-400/80 overflow-hidden text-sm"
                     >
-                      <span className="absolute inset-0 bg-red-400/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></span>
+                      <span className="absolute inset-0 bg-rose-500/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></span>
                       <span className="mr-2 relative z-10">
-                        <svg className="w-5 h-5 text-red-300 drop-shadow-[0_0_8px_rgba(252,165,165,0.8)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-5 h-5 text-rose-300 drop-shadow-md" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                         </svg>
                       </span>
@@ -329,13 +329,13 @@ function App() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10">
                 <div className="flex flex-col items-center p-4 bg-slate-800/40 rounded-2xl border border-white/5 relative">
                   <div className="w-12 h-12 bg-blue-500/20 text-blue-400 rounded-full flex items-center justify-center font-black text-xl mb-3 border border-blue-500/30">1</div>
-                  <h3 className="font-bold text-slate-200 mb-2">Sube Tiempos</h3>
-                  <p className="text-sm text-slate-500">Carga el archivo de rutas (Hojas de Ruta) en la barra superior.</p>
+                  <h3 className="font-bold text-slate-200 mb-2">Sube Tareas</h3>
+                  <p className="text-sm text-slate-500">Carga el archivo de rutas (Tareas y Viajes) en la barra superior.</p>
                 </div>
                 <div className="flex flex-col items-center p-4 bg-slate-800/40 rounded-2xl border border-white/5 relative">
                   <div className="w-12 h-12 bg-rose-500/20 text-rose-400 rounded-full flex items-center justify-center font-black text-xl mb-3 border border-rose-500/30">2</div>
                   <h3 className="font-bold text-slate-200 mb-2">Sube GPS</h3>
-                  <p className="text-sm text-slate-500">Carga el archivo de telemetría para análisis de seguridad.</p>
+                  <p className="text-sm text-slate-500">Carga el archivo de velocidad excesiva para análisis de seguridad.</p>
                 </div>
                 <div className="flex flex-col items-center p-4 bg-slate-800/40 rounded-2xl border border-white/5 relative">
                   <div className="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center font-black text-xl mb-3 border border-emerald-500/30">3</div>
