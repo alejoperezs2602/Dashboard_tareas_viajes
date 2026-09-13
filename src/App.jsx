@@ -314,7 +314,43 @@ function App() {
           )}
         </AnimatePresence>
 
-        {(allTrips.length > 0 || telemetryData.length > 0) && (
+        {(allTrips.length === 0 && telemetryData.length === 0) ? (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col items-center justify-center mt-20 text-center space-y-8"
+          >
+            <div className="glass-panel p-10 rounded-[2.5rem] max-w-2xl w-full relative overflow-hidden border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-400/10 blur-3xl rounded-full -mt-20 -mr-20 pointer-events-none"></div>
+              
+              <h2 className="text-3xl font-extrabold text-slate-100 mb-2">Bienvenido al Centro de Control</h2>
+              <p className="text-slate-400 text-lg mb-10">Sigue estos pasos para comenzar a visualizar los datos de tu flota.</p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10">
+                <div className="flex flex-col items-center p-4 bg-slate-800/40 rounded-2xl border border-white/5 relative">
+                  <div className="w-12 h-12 bg-blue-500/20 text-blue-400 rounded-full flex items-center justify-center font-black text-xl mb-3 border border-blue-500/30">1</div>
+                  <h3 className="font-bold text-slate-200 mb-2">Sube Tiempos</h3>
+                  <p className="text-sm text-slate-500">Carga el archivo de rutas (Hojas de Ruta) en la barra superior.</p>
+                </div>
+                <div className="flex flex-col items-center p-4 bg-slate-800/40 rounded-2xl border border-white/5 relative">
+                  <div className="w-12 h-12 bg-rose-500/20 text-rose-400 rounded-full flex items-center justify-center font-black text-xl mb-3 border border-rose-500/30">2</div>
+                  <h3 className="font-bold text-slate-200 mb-2">Sube GPS</h3>
+                  <p className="text-sm text-slate-500">Carga el archivo de telemetría para análisis de seguridad.</p>
+                </div>
+                <div className="flex flex-col items-center p-4 bg-slate-800/40 rounded-2xl border border-white/5 relative">
+                  <div className="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center font-black text-xl mb-3 border border-emerald-500/30">3</div>
+                  <h3 className="font-bold text-slate-200 mb-2">Explora</h3>
+                  <p className="text-sm text-slate-500">Obtén alertas, puntajes y mapas interactivos automáticamente.</p>
+                </div>
+              </div>
+              
+              <div className="mt-10 pt-6 border-t border-white/5 flex items-center justify-center gap-2 text-slate-500 text-sm">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                Privacidad total: Tus datos se procesan localmente y nunca salen de tu navegador.
+              </div>
+            </div>
+          </motion.div>
+        ) : (
           <motion.div 
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -338,6 +374,35 @@ function App() {
                   onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))}
                   className="bg-transparent text-sm font-bold text-slate-200 outline-none cursor-pointer"
                 />
+                <button 
+                  onClick={() => {
+                    // Find max date in allTrips
+                    if (allTrips.length === 0) return;
+                    let maxStr = allTrips[0].fecha;
+                    let maxTime = new Date(maxStr).getTime();
+                    
+                    allTrips.forEach(t => {
+                      const tTime = new Date(t.fecha).getTime();
+                      if (tTime > maxTime) {
+                        maxTime = tTime;
+                        maxStr = t.fecha;
+                      }
+                    });
+                    
+                    // Format to YYYY-MM-DD
+                    if (maxStr) {
+                      try {
+                        const d = new Date(maxStr);
+                        const iso = d.toISOString().split('T')[0];
+                        setDateRange({ start: iso, end: iso });
+                      } catch(e) {}
+                    }
+                  }}
+                  className="ml-2 px-3 py-1 text-xs font-bold bg-cyan-500/20 text-cyan-400 rounded-lg hover:bg-cyan-500/30 transition-colors"
+                  title="Filtrar al último día con datos"
+                >
+                  Último Día
+                </button>
                 {(dateRange.start || dateRange.end) && (
                   <button onClick={() => setDateRange({start: '', end: ''})} className="ml-2 text-rose-400 hover:text-rose-300">
                     ✕

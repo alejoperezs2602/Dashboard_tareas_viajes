@@ -1,8 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { parseCustomDate } from '../utils/dateUtils.js';
 import { PUNCTUALITY_TOLERANCE_MIN, RISK_DELAY_THRESHOLD, RISK_SPEED_THRESHOLD, TOP_N_DEFAULT } from '../constants/index.js';
-import SmartAlerts from './SmartAlerts';
-import SmartInsights from './SmartInsights';
+import IntelligenceCenter from './IntelligenceCenter';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -155,7 +154,25 @@ export default function GeneralDashboard({ allTrips, onDrillDown, telemetryData 
       });
     }
 
-    return { totalDist, vehiculosSorted, vehiculosMap, allConductors, efficiency, puestosArray, vehiculosTarde, vehiculosAntes, topViajesTarde, topViajesAntes, riesgoData };
+    let totalPunctualPts = efficiency.antes + efficiency.tiempo;
+    let totalPts = totalPunctualPts + efficiency.tarde;
+    let punctScore = totalPts > 0 ? (totalPunctualPts / totalPts) * 100 : 0;
+    
+    let avgSpeedingPerTrip = 0;
+    if (telemetryData.length > 0 && allTrips.length > 0) {
+      let totalExcesos = telemetryData.reduce((acc, v) => acc + (v.excesos || 0), 0);
+      avgSpeedingPerTrip = totalExcesos / allTrips.length;
+    }
+    // Speeding score logic: 10 excesos per trip = 0 score. 0 excesos = 100 score.
+    let speedScore = Math.max(0, (1 - (avgSpeedingPerTrip / 5)) * 100);
+    
+    // Weight: 60% punctuality, 40% safety
+    let healthScore = Math.round((punctScore * 0.60) + (speedScore * 0.40));
+    if (isNaN(healthScore)) healthScore = 0;
+    if (healthScore > 100) healthScore = 100;
+    if (healthScore < 0) healthScore = 0;
+
+    return { totalDist, vehiculosSorted, vehiculosMap, allConductors, efficiency, puestosArray, vehiculosTarde, vehiculosAntes, topViajesTarde, topViajesAntes, riesgoData, healthScore, punctScore, avgSpeedingPerTrip };
   }, [allTrips, telemetryData]);
 
   const [effViewMode, setEffViewMode] = useState('GLOBAL'); // GLOBAL, ANTES, TARDE
@@ -300,10 +317,18 @@ export default function GeneralDashboard({ allTrips, onDrillDown, telemetryData 
     'bg-rose-400': 'text-rose-600',
   };
 
-  const StatCard = ({ title, value, colorClass, iconPath }) => (
+  const StatCard = ({ title, value, colorClass, iconPath, tooltipText }) => (
     <Tilt tiltMaxAngleX={5} tiltMaxAngleY={5} scale={1.02} transitionSpeed={2000} className="h-full">
-      <div className="relative overflow-hidden glass-panel rounded-3xl p-6 group transition-all duration-500 h-full">
+      <div className="relative overflow-hidden glass-panel rounded-3xl p-6 group transition-all duration-500 h-full cursor-help">
         <div className={`absolute top-0 right-0 -mt-8 -mr-8 w-32 h-32 rounded-full blur-3xl opacity-50 ${colorClass}`}></div>
+        
+        {/* Tooltip */}
+        {tooltipText && (
+          <div className="absolute inset-0 bg-slate-900/90 backdrop-blur-md z-20 flex items-center justify-center p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+            <p className="text-sm font-medium text-slate-200 text-center">{tooltipText}</p>
+          </div>
+        )}
+
         <div className="flex justify-between items-start relative z-10">
           <div>
             <p className="text-xs font-bold text-slate-300/80 uppercase tracking-wider mb-2">{title}</p>
@@ -318,6 +343,7 @@ export default function GeneralDashboard({ allTrips, onDrillDown, telemetryData 
       </div>
     </Tilt>
   );
+
 
   const comparativo = useMemo(() => {
     if (allTrips.length < 2) return null;
@@ -349,64 +375,101 @@ export default function GeneralDashboard({ allTrips, onDrillDown, telemetryData 
 
   return (
     <div className="space-y-8">
-      {/* Alertas Inteligentes */}
-      <SmartAlerts allTrips={allTrips} telemetryData={telemetryData} />
+      {/* Score de Salud de Flota (A2) */}
+      <div className="glass-panel p-6 md:p-8 rounded-[2.5rem] flex flex-col md:flex-row items-center justify-between gap-8 border border-white/5 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 blur-3xl rounded-full -mt-20 -mr-20 pointer-events-none opacity-20 bg-emerald-400"></div>
+        <div className="flex items-center gap-6 relative z-10 w-full md:w-auto">
+          <div className="relative shrink-0">
+            <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 36 36">
+              <path className="text-slate-700/50" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="3" />
+              <path className={`${stats.healthScore >= 80 ? 'text-emerald-400' : stats.healthScore >= 60 ? 'text-amber-400' : 'text-rose-400'} transition-all duration-1000`} strokeDasharray={`${stats.healthScore}, 100`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="3" />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className={`text-2xl font-black ${stats.healthScore >= 80 ? 'text-emerald-400' : stats.healthScore >= 60 ? 'text-amber-400' : 'text-rose-400'}`}>{stats.healthScore}</span>
+            </div>
+          </div>
+          <div>
+            <h2 className="text-3xl font-extrabold text-slate-100 drop-shadow-sm">Score de Salud</h2>
+            <p className={`text-sm font-bold uppercase tracking-wider mt-1 ${stats.healthScore >= 80 ? 'text-emerald-400' : stats.healthScore >= 60 ? 'text-amber-400' : 'text-rose-400'}`}>
+              {stats.healthScore >= 80 ? 'Excelente' : stats.healthScore >= 60 ? 'Satisfactorio' : 'Crítico'}
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-6 relative z-10 border-t md:border-t-0 md:border-l border-white/10 pt-4 md:pt-0 md:pl-8 w-full md:w-auto">
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Puntualidad</p>
+            <p className="text-xl font-extrabold text-slate-200">{stats.punctScore.toFixed(1)}%</p>
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Excesos Promedio</p>
+            <p className="text-xl font-extrabold text-slate-200">{stats.avgSpeedingPerTrip.toFixed(1)} <span className="text-sm font-medium text-slate-500">x viaje</span></p>
+          </div>
+        </div>
+      </div>
 
-      {/* Summary Cards */}
+      {/* Centro de Inteligencia (C3) - Fusionado de Alertas e Insights */}
+      <IntelligenceCenter allTrips={allTrips} telemetryData={telemetryData} />
+
+      {/* Summary Cards (A3) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
           title="Viajes Registrados" 
           value={allTrips.length} 
           colorClass="bg-blue-400" 
           iconPath="M9 19V6l12-3v13M9 19c-1.105 0-2-.895-2-2s.895-2 2-2 2 .895 2 2-.895 2-2 2zm12-3c-1.105 0-2-.895-2-2s.895-2 2-2 2 .895 2 2-.895 2-2 2zM9 10l12-3"
+          tooltipText="Total de hojas de ruta procesadas del archivo Excel cargado."
         />
         <StatCard 
           title="Distancia Total (km)" 
           value={stats.totalDist.toFixed(1)} 
           colorClass="bg-emerald-400" 
           iconPath="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+          tooltipText="Suma total de kilómetros recorridos por la flota en el período actual."
         />
         <StatCard 
           title="Vehículos Diferentes" 
           value={stats.vehiculosSorted.length} 
           colorClass="bg-indigo-400" 
           iconPath="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+          tooltipText="Cantidad de vehículos únicos (N° Interno) que realizaron al menos un viaje."
         />
         <StatCard 
           title="Conductores" 
           value={stats.allConductors.size} 
           colorClass="bg-rose-400" 
           iconPath="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+          tooltipText="Número de personas distintas registradas como conductores."
         />
       </div>
 
-      {/* Comparativo de Períodos */}
+      {/* Tendencia (C2) */}
       {comparativo && (
         <div className="glass-panel p-6 rounded-3xl mt-6 flex flex-col md:flex-row items-center justify-between gap-6 border-l-4 border-l-cyan-400 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-400/10 blur-3xl rounded-full -mt-20 -mr-20 pointer-events-none"></div>
           <div>
-            <h3 className="text-lg font-bold text-slate-100 flex items-center">
-              <svg className="w-5 h-5 mr-2 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
-              Tendencia Reciente (Segunda vs Primera mitad del período)
+            <h3 className="text-xl font-extrabold text-slate-100 flex items-center">
+              ¿Cómo va la operación?
             </h3>
-            <p className="text-slate-400 text-sm mt-1">Comparación automática basada en los datos actualmente filtrados.</p>
+            <p className="text-slate-400 text-sm mt-1 font-medium">
+              La puntualidad {comparativo.diffPunct >= 0 ? 'mejoró' : 'cayó'} <span className={`font-bold ${comparativo.diffPunct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{Math.abs(comparativo.diffPunct).toFixed(1)} puntos</span> respecto al inicio del período.
+            </p>
           </div>
           <div className="flex gap-8 relative z-10">
             <div>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Volumen de Viajes</p>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Puntualidad Actual</p>
               <div className="flex items-end gap-2 mt-1">
-                <span className="text-2xl font-extrabold text-slate-200">{comparativo.p2Viajes}</span>
-                <span className={`text-sm font-bold mb-1 ${comparativo.diffViajes >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {comparativo.diffViajes >= 0 ? '▲ +' : '▼ '}{comparativo.diffViajes}
+                <span className="text-2xl font-extrabold text-slate-200">{comparativo.p2Punct.toFixed(1)}%</span>
+                <span className={`text-sm font-bold mb-1 ${comparativo.diffPunct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {comparativo.diffPunct >= 0 ? '▲' : '▼'}
                 </span>
               </div>
             </div>
             <div>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Puntualidad</p>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Volumen Viajes</p>
               <div className="flex items-end gap-2 mt-1">
-                <span className="text-2xl font-extrabold text-slate-200">{comparativo.p2Punct.toFixed(1)}%</span>
-                <span className={`text-sm font-bold mb-1 ${comparativo.diffPunct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {comparativo.diffPunct >= 0 ? '▲ +' : '▼ '}{comparativo.diffPunct.toFixed(1)}%
+                <span className="text-2xl font-extrabold text-slate-200">{comparativo.p2Viajes}</span>
+                <span className={`text-sm font-bold mb-1 ${comparativo.diffViajes >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {comparativo.diffViajes >= 0 ? '▲ +' : '▼ '}{comparativo.diffViajes}
                 </span>
               </div>
             </div>
@@ -596,7 +659,29 @@ export default function GeneralDashboard({ allTrips, onDrillDown, telemetryData 
         </div>
       )}
 
-      {/* Critical Analysis Row */}
+      {/* Critical Analysis Section */}
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4 mt-12 mb-4">
+         <h2 className="text-3xl font-extrabold text-slate-100 drop-shadow-sm flex items-center">
+           Análisis Crítico
+         </h2>
+         
+         {/* Global Toggle Button */}
+         <div className="flex bg-slate-800/50 backdrop-blur-md rounded-xl p-1 border border-white/60 shadow-sm">
+           <button 
+             onClick={() => setCritViewMode('TARDE')}
+             className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${critViewMode === 'TARDE' ? 'bg-orange-500 text-white shadow-md' : 'text-slate-300 hover:text-slate-200'}`}
+           >
+             Ver Retrasos
+           </button>
+           <button 
+             onClick={() => setCritViewMode('ANTES')}
+             className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${critViewMode === 'ANTES' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-300 hover:text-slate-200'}`}
+           >
+             Ver Anticipos
+           </button>
+         </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         
         {/* Critical Vehicles */}
@@ -605,28 +690,12 @@ export default function GeneralDashboard({ allTrips, onDrillDown, telemetryData 
              <div>
                  <h3 className="text-2xl font-extrabold text-slate-100 drop-shadow-sm flex items-center">
                    {critViewMode === 'TARDE' ? (
-                     <><span className="w-4 h-4 bg-orange-500 rounded-full mr-3 shadow-sm"></span>Vehículos: Retraso</>
+                     <><span className="w-4 h-4 bg-orange-500 rounded-full mr-3 shadow-sm"></span>Top Vehículos (Retraso)</>
                    ) : (
-                     <><span className="w-4 h-4 bg-emerald-500 rounded-full mr-3 shadow-sm"></span>Vehículos: Llegada Antes</>
+                     <><span className="w-4 h-4 bg-emerald-500 rounded-full mr-3 shadow-sm"></span>Top Vehículos (Anticipo)</>
                    )}
                  </h3>
                  <p className="text-sm font-medium text-slate-400/80 mt-1">Diferencia neta acumulada (min)</p>
-             </div>
-             
-             {/* Toggle Button */}
-             <div className="flex bg-slate-800/50 backdrop-blur-md rounded-xl p-1 border border-white/60 shadow-sm">
-               <button 
-                 onClick={() => setCritViewMode('TARDE')}
-                 className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${critViewMode === 'TARDE' ? 'bg-orange-500 text-white shadow-md' : 'text-slate-300 hover:text-slate-200'}`}
-               >
-                 Retrasos
-               </button>
-               <button 
-                 onClick={() => setCritViewMode('ANTES')}
-                 className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${critViewMode === 'ANTES' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-300 hover:text-slate-200'}`}
-               >
-                 Llegada Antes
-               </button>
              </div>
           </div>
           
@@ -706,8 +775,6 @@ export default function GeneralDashboard({ allTrips, onDrillDown, telemetryData 
           </div>
         </div>
       </div>
-      {/* Síntesis de IA */}
-      <SmartInsights allTrips={allTrips} telemetryData={telemetryData} />
     </div>
   );
 }
