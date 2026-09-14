@@ -71,8 +71,11 @@ function App() {
   const filteredTrips = useMemo(() => {
     if (!dateRange.start && !dateRange.end) return allTrips;
     
-    const start = dateRange.start ? parseLocalYMD(dateRange.start) : new Date('2000-01-01T00:00:00');
-    const end = dateRange.end ? parseLocalYMD(dateRange.end) : new Date('2100-01-01T00:00:00');
+    const startYMD = dateRange.start || dateRange.end;
+    const endYMD = dateRange.end || dateRange.start;
+    
+    const start = parseLocalYMD(startYMD);
+    const end = parseLocalYMD(endYMD);
     end.setHours(23, 59, 59, 999);
     
     return allTrips.filter(t => {
@@ -85,8 +88,11 @@ function App() {
   const filteredTelemetry = useMemo(() => {
     if (!dateRange.start && !dateRange.end) return telemetryData;
     
-    const start = dateRange.start ? parseLocalYMD(dateRange.start) : new Date('2000-01-01T00:00:00');
-    const end = dateRange.end ? parseLocalYMD(dateRange.end) : new Date('2100-01-01T00:00:00');
+    const startYMD = dateRange.start || dateRange.end;
+    const endYMD = dateRange.end || dateRange.start;
+    
+    const start = parseLocalYMD(startYMD);
+    const end = parseLocalYMD(endYMD);
     end.setHours(23, 59, 59, 999);
     
     return telemetryData.map(veh => {
@@ -338,6 +344,22 @@ function App() {
             <ErrorBanner message={error} onDismiss={() => setError(null)} />
           )}
         </AnimatePresence>
+        
+        {/* DEBUG BANNER */}
+        {process.env.NODE_ENV !== 'production' && (
+          <div className="bg-red-900/50 p-4 text-xs font-mono text-white whitespace-pre-wrap">
+            DEBUG INFO:
+            DateRange State: {JSON.stringify(dateRange)}
+            Start Parsed: {dateRange.start ? String(new Date(dateRange.start.split('-')[0], dateRange.start.split('-')[1]-1, dateRange.start.split('-')[2])) : 'N/A'}
+            End Parsed: {dateRange.end ? String(new Date(dateRange.end.split('-')[0], dateRange.end.split('-')[1]-1, dateRange.end.split('-')[2])) : 'N/A'}
+            AllTrips count: {allTrips.length} - FilteredTrips: {filteredTrips.length}
+            Telemetry count: {telemetryData.length} - FilteredTelemetry: {filteredTelemetry.length}
+            Vehicle 16690 original excesos: {telemetryData.find(v => String(v.interno) === '16690')?.excesos}
+            Vehicle 16690 filtered excesos: {filteredTelemetry.find(v => String(v.interno) === '16690')?.excesos}
+            Vehicle 16690 original first point date: {telemetryData.find(v => String(v.interno) === '16690')?.puntos[0]?.fecha}
+            Vehicle 16690 original first point parsed: {String(parseCustomDate(telemetryData.find(v => String(v.interno) === '16690')?.puntos[0]?.fecha))}
+          </div>
+        )}
 
         {(allTrips.length === 0 && telemetryData.length === 0) ? (
           <motion.div 

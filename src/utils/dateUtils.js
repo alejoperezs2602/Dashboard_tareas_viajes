@@ -66,9 +66,9 @@ export function parseCustomDate(dateStr) {
   
   const str = String(dateStr).trim();
   
-  // Check if it's an Excel serial date (pure numbers)
-  if (/^\d+$/.test(str)) {
-    const serial = parseInt(str, 10);
+  // Check if it's an Excel serial date (pure numbers or floats)
+  if (/^\d+(\.\d+)?$/.test(str)) {
+    const serial = parseFloat(str);
     // Excel epoch difference to Unix epoch (25569 days)
     const ms = (serial - 25569) * 86400 * 1000;
     const utcDate = new Date(ms);
