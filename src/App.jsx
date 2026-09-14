@@ -187,10 +187,6 @@ function App() {
         // raw: true ensures we get the underlying Excel serial date, not just "September"
         const flatData = XLSX.utils.sheet_to_json(worksheet, { raw: true });
         
-        if (flatData.length > 0) {
-          window.__DEBUG_RAW_TELEMETRY_ROW = flatData[0];
-        }
-
         const parsed = parseTelemetry(flatData);
         if (parsed.length === 0) {
           setError("No se encontraron coordenadas GPS válidas. Revise las columnas (Latitud, Longitud, Velocidad).");
@@ -352,15 +348,6 @@ function App() {
             <ErrorBanner message={error} onDismiss={() => setError(null)} />
           )}
         </AnimatePresence>
-        
-        {/* DEBUG BANNER (Temporalmente visible para diagnosticar el problema de fechas) */}
-        <div className="bg-red-900/50 p-4 text-xs font-mono text-white whitespace-pre-wrap rounded-xl my-4">
-          DEBUG INFO:
-          DateRange State: {JSON.stringify(dateRange)}
-          Vehicle 16690 original first point date: {telemetryData.find(v => String(v.interno) === '16690')?.puntos[0]?.fecha}
-          Original telemetry raw row keys: {telemetryData.length > 0 ? JSON.stringify(Object.keys(window.__DEBUG_RAW_TELEMETRY_ROW || {})) : 'N/A'}
-          Original telemetry raw row values: {telemetryData.length > 0 ? JSON.stringify(window.__DEBUG_RAW_TELEMETRY_ROW || {}) : 'N/A'}
-        </div>
 
         {(allTrips.length === 0 && telemetryData.length === 0) ? (
           <motion.div 
