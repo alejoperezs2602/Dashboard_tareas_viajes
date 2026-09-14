@@ -61,11 +61,20 @@ function App() {
     restore();
   }, []);
 
+  // Helper to parse YYYY-MM-DD to local Date
+  const parseLocalYMD = (ymdStr) => {
+    if (!ymdStr) return null;
+    const [y, m, d] = ymdStr.split('-');
+    return new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10));
+  };
+
   const filteredTrips = useMemo(() => {
     if (!dateRange.start && !dateRange.end) return allTrips;
-    const start = dateRange.start ? new Date(dateRange.start) : new Date('2000-01-01');
-    const end = dateRange.end ? new Date(dateRange.end) : new Date('2100-01-01');
+    
+    const start = dateRange.start ? parseLocalYMD(dateRange.start) : new Date('2000-01-01T00:00:00');
+    const end = dateRange.end ? parseLocalYMD(dateRange.end) : new Date('2100-01-01T00:00:00');
     end.setHours(23, 59, 59, 999);
+    
     return allTrips.filter(t => {
       const d = parseCustomDate(t.fecha);
       if (!d) return true;
@@ -75,9 +84,11 @@ function App() {
 
   const filteredTelemetry = useMemo(() => {
     if (!dateRange.start && !dateRange.end) return telemetryData;
-    const start = dateRange.start ? new Date(dateRange.start) : new Date('2000-01-01');
-    const end = dateRange.end ? new Date(dateRange.end) : new Date('2100-01-01');
+    
+    const start = dateRange.start ? parseLocalYMD(dateRange.start) : new Date('2000-01-01T00:00:00');
+    const end = dateRange.end ? parseLocalYMD(dateRange.end) : new Date('2100-01-01T00:00:00');
     end.setHours(23, 59, 59, 999);
+    
     return telemetryData.map(veh => ({
       ...veh,
       puntos: veh.puntos.filter(p => {
@@ -379,23 +390,36 @@ function App() {
                     // Find max date in allTrips
                     if (allTrips.length === 0) return;
                     let maxStr = allTrips[0].fecha;
-                    let maxTime = new Date(maxStr).getTime();
+                    let maxTime = 0;
+                    
+                    const firstDate = parseCustomDate(maxStr);
+                    if (firstDate) maxTime = firstDate.getTime();
                     
                     allTrips.forEach(t => {
-                      const tTime = new Date(t.fecha).getTime();
-                      if (tTime > maxTime) {
-                        maxTime = tTime;
-                        maxStr = t.fecha;
+                      const d = parseCustomDate(t.fecha);
+                      if (d) {
+                        const tTime = d.getTime();
+                        if (tTime > maxTime) {
+                          maxTime = tTime;
+                          maxStr = t.fecha;
+                        }
                       }
                     });
                     
-                    // Format to YYYY-MM-DD
+                    // Format to YYYY-MM-DD using local time
                     if (maxStr) {
                       try {
-                        const d = new Date(maxStr);
-                        const iso = d.toISOString().split('T')[0];
-                        setDateRange({ start: iso, end: iso });
-                      } catch(e) {}
+                        const d = parseCustomDate(maxStr);
+                        if (d) {
+                          const y = d.getFullYear();
+                          const m = String(d.getMonth() + 1).padStart(2, '0');
+                          const day = String(d.getDate()).padStart(2, '0');
+                          const iso = `${y}-${m}-${day}`;
+                          setDateRange({ start: iso, end: iso });
+                        }
+                      } catch(e) {
+                        console.error("Error setting date range", e);
+                      }
                     }
                   }}
                   className="ml-2 px-3 py-1 text-xs font-bold bg-cyan-500/20 text-cyan-400 rounded-lg hover:bg-cyan-500/30 transition-colors"
