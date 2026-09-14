@@ -276,7 +276,7 @@ export default function IndividualDashboard({ allTrips, filters, setFilters, tel
               onChange={(val) => updateFilter('viajeIndex', val)}
               options={[
                 { value: '', label: 'Seleccione un viaje' },
-                ...filteredTrips.map(t => ({ value: t.originalIndex, label: `${t.viaje} | ${t.ruta}` }))
+                ...filteredTrips.map(t => ({ value: t.originalIndex.toString(), label: `${t.viaje} | ${t.ruta}` }))
               ]}
               placeholder="Seleccione un viaje"
               highlight={true}
