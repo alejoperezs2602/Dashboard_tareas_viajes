@@ -1,10 +1,22 @@
-import React, { useState, useMemo } from 'react';
-import { MapContainer, TileLayer, Polyline, CircleMarker, Popup } from 'react-leaflet';
+import React, { useState, useMemo, useEffect } from 'react';
+import { MapContainer, TileLayer, Polyline, CircleMarker, Popup, useMap } from 'react-leaflet';
 import Tilt from 'react-parallax-tilt';
 import { SPEED_LIMIT_KMH, DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM, MAP_TILE_URL, MAP_ATTRIBUTION, SPEEDING_MARKER_STYLE, ROUTE_POLYLINE_STYLE } from '../constants/index.js';
+import SearchableSelect from './ui/SearchableSelect.jsx';
+
+function MapController({ targetPoint }) {
+  const map = useMap();
+  useEffect(() => {
+    if (targetPoint) {
+      map.flyTo(targetPoint, 18, { duration: 1.5 });
+    }
+  }, [targetPoint, map]);
+  return null;
+}
 
 export default function TelemetryDashboard({ telemetryData }) {
   const [selectedInterno, setSelectedInterno] = useState('');
+  const [selectedAlert, setSelectedAlert] = useState(null);
 
   const vehiclesList = useMemo(() => {
     return [...telemetryData].sort((a, b) => b.excesos - a.excesos);
@@ -35,25 +47,25 @@ export default function TelemetryDashboard({ telemetryData }) {
             <p className="text-sm font-medium text-slate-400/80">Identificador visual de excesos de velocidad (&gt; {SPEED_LIMIT_KMH} km/h)</p>
           </div>
           
-          <div className="w-full md:w-auto">
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Vehículo (N° Int)</label>
-            <div className="relative">
-              <select 
-                value={selectedInterno} 
-                onChange={(e) => setSelectedInterno(e.target.value)} 
-                className="w-full md:w-64 appearance-none bg-slate-800/70 backdrop-blur-md border border-rose-300 shadow-[0_4px_15px_rgba(225,29,72,0.15)] text-slate-100 rounded-2xl px-5 py-3 outline-none transition-all focus:ring-4 focus:ring-rose-500/30 font-bold cursor-pointer"
-              >
-                <option className="bg-slate-900 text-slate-100" value="">Seleccione un vehículo...</option>
-                {vehiclesList.map(v => (
-                  <option className="bg-slate-900 text-slate-100" key={v.interno} value={v.interno}>
-                    {v.interno} ({v.excesos} excesos)
-                  </option>
-                ))}
-              </select>
-              <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-rose-600">
-                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7"></path></svg>
-              </div>
-            </div>
+          <div className="w-full md:w-64">
+            <SearchableSelect 
+              label="Vehículo (N° Int)"
+              value={selectedInterno}
+              onChange={(val) => {
+                setSelectedInterno(val);
+                setSelectedAlert(null);
+              }}
+              options={[
+                { value: '', label: 'Seleccione un vehículo...' },
+                ...vehiclesList.map(v => ({
+                  value: v.interno,
+                  label: `${v.interno} (${v.excesos} excesos)`
+                }))
+              ]}
+              placeholder="Seleccione un vehículo..."
+              highlight={true}
+              theme="rose"
+            />
           </div>
         </div>
       </div>
@@ -81,20 +93,31 @@ export default function TelemetryDashboard({ telemetryData }) {
              <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
                 {selectedVehicleData.excesos > 0 ? (
                   <div className="space-y-3">
-                    {selectedVehicleData.puntos.filter(p => p.esExceso).map((p, idx) => (
-                      <div key={idx} className="flex justify-between items-center p-4 rounded-2xl bg-slate-800/40 border border-white/10 hover:bg-slate-700/60 hover:shadow-[0_8px_20px_rgba(244,63,94,0.15)] transition-all duration-300 group relative overflow-hidden">
-                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.8)]"></div>
-                        <div className="pl-3">
-                          <span className="text-rose-400 font-black block text-xl tracking-wide">{p.velocidad} km/h</span>
-                          <span className="text-xs font-bold text-slate-300 mt-1 block">Cond: <span className="text-white">{p.conductor}</span></span>
-                          <span className="text-[10px] font-bold text-rose-300/70">{p.fecha} - {p.hora}</span>
+                    {selectedVehicleData.puntos.filter(p => p.esExceso).map((p, idx) => {
+                      const isSelected = selectedAlert && selectedAlert[0] === p.lat && selectedAlert[1] === p.lng;
+                      return (
+                        <div 
+                          key={idx} 
+                          onClick={() => setSelectedAlert([p.lat, p.lng])}
+                          className={`flex justify-between items-center p-4 rounded-2xl border transition-all duration-300 group relative overflow-hidden cursor-pointer ${
+                            isSelected 
+                              ? 'bg-rose-500/20 border-rose-400 shadow-[0_0_20px_rgba(244,63,94,0.3)]' 
+                              : 'bg-slate-800/40 border-white/10 hover:bg-slate-700/60 hover:shadow-[0_8px_20px_rgba(244,63,94,0.15)]'
+                          }`}
+                        >
+                          <div className={`absolute left-0 top-0 bottom-0 w-1 shadow-[0_0_10px_rgba(244,63,94,0.8)] ${isSelected ? 'bg-white' : 'bg-rose-500'}`}></div>
+                          <div className="pl-3">
+                            <span className={`${isSelected ? 'text-white drop-shadow-md' : 'text-rose-400'} font-black block text-xl tracking-wide transition-colors`}>{p.velocidad} km/h</span>
+                            <span className="text-xs font-bold text-slate-300 mt-1 block">Cond: <span className="text-white">{p.conductor}</span></span>
+                            <span className="text-[10px] font-bold text-rose-300/70">{p.fecha} - {p.hora}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[11px] font-bold text-slate-400 block tracking-wider">Lat: {p.lat.toFixed(4)}</span>
+                            <span className="text-[11px] font-bold text-slate-400 block tracking-wider">Lng: {p.lng.toFixed(4)}</span>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <span className="text-[11px] font-bold text-slate-400 block tracking-wider">Lat: {p.lat.toFixed(4)}</span>
-                          <span className="text-[11px] font-bold text-slate-400 block tracking-wider">Lng: {p.lng.toFixed(4)}</span>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="flex h-full items-center justify-center text-emerald-500 font-bold text-center">
@@ -115,6 +138,8 @@ export default function TelemetryDashboard({ telemetryData }) {
               zoom={DEFAULT_MAP_ZOOM} 
               style={{ height: '100%', width: '100%', borderRadius: '2.2rem', zIndex: 0 }}
             >
+              <MapController targetPoint={selectedAlert} />
+              
               <TileLayer
                 attribution={MAP_ATTRIBUTION}
                 url={MAP_TILE_URL}
@@ -127,21 +152,29 @@ export default function TelemetryDashboard({ telemetryData }) {
               />
 
               {/* Puntos de exceso de velocidad */}
-              {selectedVehicleData.puntos.filter(p => p.esExceso).map((p, idx) => (
-                <CircleMarker 
-                  key={idx}
-                  center={[p.lat, p.lng]} 
-                  pathOptions={SPEEDING_MARKER_STYLE} 
-                  radius={SPEEDING_MARKER_STYLE.radius}
-                >
-                  <Popup className="font-sans font-bold">
-                    <div className="text-center">
-                      <p className="text-rose-600 text-lg mb-1">{p.velocidad} km/h</p>
-                      <p className="text-xs text-slate-500">Conductor: {p.conductor}</p>
-                    </div>
-                  </Popup>
-                </CircleMarker>
-              ))}
+              {selectedVehicleData.puntos.filter(p => p.esExceso).map((p, idx) => {
+                const isSelected = selectedAlert && selectedAlert[0] === p.lat && selectedAlert[1] === p.lng;
+                
+                return (
+                  <CircleMarker 
+                    key={idx}
+                    center={[p.lat, p.lng]} 
+                    pathOptions={{
+                      ...SPEEDING_MARKER_STYLE,
+                      fillColor: isSelected ? '#ffffff' : SPEEDING_MARKER_STYLE.fillColor,
+                      color: isSelected ? '#ffffff' : SPEEDING_MARKER_STYLE.color,
+                    }} 
+                    radius={isSelected ? SPEEDING_MARKER_STYLE.radius * 1.5 : SPEEDING_MARKER_STYLE.radius}
+                  >
+                    <Popup className="font-sans font-bold">
+                      <div className="text-center">
+                        <p className="text-rose-600 text-lg mb-1">{p.velocidad} km/h</p>
+                        <p className="text-xs text-slate-500">Conductor: {p.conductor}</p>
+                      </div>
+                    </Popup>
+                  </CircleMarker>
+                );
+              })}
             </MapContainer>
           </div>
           

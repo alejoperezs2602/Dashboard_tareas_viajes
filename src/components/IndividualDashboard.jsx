@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { timeToMs, matchDate } from '../utils/dateUtils.js';
 import { SPEED_LIMIT_KMH, PUNCTUALITY_TOLERANCE_MIN, DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM, MAP_TILE_URL, MAP_ATTRIBUTION, SPEEDING_MARKER_STYLE, ROUTE_POLYLINE_STYLE } from '../constants/index.js';
+import SearchableSelect from './ui/SearchableSelect.jsx';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -227,59 +228,60 @@ export default function IndividualDashboard({ allTrips, filters, setFilters, tel
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="group">
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 transition-colors group-focus-within:text-blue-700">Vehículo (N° Int)</label>
-            <div className="relative">
-              <select value={filterInterno} onChange={(e) => updateFilter('interno', e.target.value)} className="w-full appearance-none bg-slate-800/50 backdrop-blur-md border border-white/60 shadow-sm text-slate-100 rounded-2xl px-5 py-3 outline-none transition-all focus:ring-4 focus:ring-blue-500/30 font-semibold cursor-pointer">
-                <option className="bg-slate-900 text-slate-100" value="ALL">Todos los vehículos</option>
-                {filterOptions.internos.map(i => <option className="bg-slate-900 text-slate-100" key={i} value={i}>{i}</option>)}
-              </select>
-              <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-blue-600">
-                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7"></path></svg>
-              </div>
-            </div>
+            <SearchableSelect 
+              label="Vehículo (N° Int)"
+              value={filterInterno}
+              onChange={(val) => updateFilter('interno', val)}
+              options={[
+                { value: 'ALL', label: 'Todos los vehículos' },
+                ...filterOptions.internos.map(i => ({ value: i, label: i }))
+              ]}
+              placeholder="Todos los vehículos"
+              theme="blue"
+            />
           </div>
 
           <div className="group">
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 transition-colors group-focus-within:text-blue-700">Ruta</label>
-            <div className="relative">
-              <select value={filterRuta} onChange={(e) => updateFilter('ruta', e.target.value)} className="w-full appearance-none bg-slate-800/50 backdrop-blur-md border border-white/60 shadow-sm text-slate-100 rounded-2xl px-5 py-3 outline-none transition-all focus:ring-4 focus:ring-blue-500/30 font-semibold cursor-pointer">
-                <option className="bg-slate-900 text-slate-100" value="ALL">Todas las rutas</option>
-                {filterOptions.rutas.map(r => <option className="bg-slate-900 text-slate-100" key={r} value={r}>{r}</option>)}
-              </select>
-              <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-blue-600">
-                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7"></path></svg>
-              </div>
-            </div>
+            <SearchableSelect 
+              label="Ruta"
+              value={filterRuta}
+              onChange={(val) => updateFilter('ruta', val)}
+              options={[
+                { value: 'ALL', label: 'Todas las rutas' },
+                ...filterOptions.rutas.map(r => ({ value: r, label: r }))
+              ]}
+              placeholder="Todas las rutas"
+              theme="blue"
+            />
           </div>
 
           <div className="group">
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 transition-colors group-focus-within:text-blue-700">Conductor</label>
-            <div className="relative">
-              <select value={filterConductor} onChange={(e) => updateFilter('conductor', e.target.value)} className="w-full appearance-none bg-slate-800/50 backdrop-blur-md border border-white/60 shadow-sm text-slate-100 rounded-2xl px-5 py-3 outline-none transition-all focus:ring-4 focus:ring-blue-500/30 font-semibold cursor-pointer">
-                <option className="bg-slate-900 text-slate-100" value="ALL">Todos los conductores</option>
-                {filterOptions.conds.map(c => <option className="bg-slate-900 text-slate-100" key={c} value={c}>{c}</option>)}
-              </select>
-              <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-blue-600">
-                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7"></path></svg>
-              </div>
-            </div>
+            <SearchableSelect 
+              label="Conductor"
+              value={filterConductor}
+              onChange={(val) => updateFilter('conductor', val)}
+              options={[
+                { value: 'ALL', label: 'Todos los conductores' },
+                ...filterOptions.conds.map(c => ({ value: c, label: c }))
+              ]}
+              placeholder="Todos los conductores"
+              theme="blue"
+            />
           </div>
 
           <div className="group">
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 transition-colors group-focus-within:text-blue-700">Seleccionar Viaje</label>
-            <div className="relative">
-              <select value={selectedTripIndex} onChange={(e) => updateFilter('viajeIndex', e.target.value)} className="w-full appearance-none bg-slate-800/70 backdrop-blur-md border border-blue-300 shadow-[0_4px_15px_rgba(37,99,235,0.15)] text-slate-100 rounded-2xl px-5 py-3 outline-none transition-all focus:ring-4 focus:ring-blue-500/30 font-bold cursor-pointer">
-                <option className="bg-slate-900 text-slate-100" value="">Seleccione un viaje</option>
-                {filteredTrips.map(t => (
-                  <option className="bg-slate-900 text-slate-100" key={t.originalIndex} value={t.originalIndex}>
-                    {t.viaje} | {t.ruta}
-                  </option>
-                ))}
-              </select>
-              <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-blue-600">
-                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7"></path></svg>
-              </div>
-            </div>
+            <SearchableSelect 
+              label="Seleccionar Viaje"
+              value={selectedTripIndex}
+              onChange={(val) => updateFilter('viajeIndex', val)}
+              options={[
+                { value: '', label: 'Seleccione un viaje' },
+                ...filteredTrips.map(t => ({ value: t.originalIndex, label: `${t.viaje} | ${t.ruta}` }))
+              ]}
+              placeholder="Seleccione un viaje"
+              highlight={true}
+              theme="blue"
+            />
           </div>
         </div>
       </div>
