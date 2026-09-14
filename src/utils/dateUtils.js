@@ -66,24 +66,54 @@ export function parseCustomDate(dateStr) {
   
   const str = String(dateStr).trim();
   
-  // Check if it's an Excel serial date (pure numbers or floats)
+  // 1. Check if it's an Excel serial date (pure numbers or floats)
   if (/^\d+(\.\d+)?$/.test(str)) {
     const serial = parseFloat(str);
-    // Excel epoch difference to Unix epoch (25569 days)
     const ms = (serial - 25569) * 86400 * 1000;
     const utcDate = new Date(ms);
-    // Return a local Date object matching the UTC year/month/day
     return new Date(utcDate.getUTCFullYear(), utcDate.getUTCMonth(), utcDate.getUTCDate());
   }
 
-  // Handle strings with timestamps (e.g. "15/05/2024 14:30") by taking only the date part
-  const datePart = str.split(' ')[0];
+  // 2. If it contains letters (e.g. "May", "Oct"), native JS Date is best
+  if (/[a-zA-Z]/.test(str)) {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) return d;
+  }
 
+  // 3. Handle slashed/dashed dates: take only the date part before space
+  const datePart = str.split(' ')[0];
   const parts = datePart.replace(/[\/-]/g, '/').split('/');
-  if (parts.length !== 3) return null;
   
-  const nums = parts.map(n => parseInt(n, 10));
-  // Detect YYYY/MM/DD vs DD/MM/YYYY
-  if (nums[0] > 31) return new Date(nums[0], nums[1] - 1, nums[2]);
-  return new Date(nums[2], nums[1] - 1, nums[0]);
+  if (parts.length === 3) {
+    const nums = parts.map(n => parseInt(n, 10));
+    if (!isNaN(nums[0]) && !isNaN(nums[1]) && !isNaN(nums[2])) {
+      
+      // Detect YYYY-MM-DD vs DD-MM-YYYY
+      if (nums[0] > 31) {
+        // YYYY-MM-DD
+        let y = nums[0], m = nums[1], d = nums[2];
+        if (y < 100) y += 2000;
+        return new Date(y, m - 1, d);
+      } else {
+        // DD-MM-YYYY or MM-DD-YYYY
+        let d = nums[0], m = nums[1], y = nums[2];
+        if (y < 100) y += 2000;
+        
+        // If middle number is > 12, it must be MM/DD/YYYY, so swap them
+        if (m > 12) {
+          let temp = d;
+          d = m;
+          m = temp;
+        }
+        
+        return new Date(y, m - 1, d);
+      }
+    }
+  }
+
+  // 4. Absolute fallback
+  const fallback = new Date(str);
+  if (!isNaN(fallback.getTime())) return fallback;
+
+  return null;
 }
