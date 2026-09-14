@@ -142,7 +142,9 @@ function App() {
         const workbook = XLSX.read(data, { type: 'array' });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
-        const matrix = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false });
+        
+        // raw: true extracts actual values (like Excel serial dates) instead of formatted display text
+        const matrix = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
         
         const trips = parseAllTrips(matrix);
         if (trips.length === 0) {
@@ -181,8 +183,14 @@ function App() {
         const workbook = XLSX.read(data, { type: 'array' });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
-        const flatData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
         
+        // raw: true ensures we get the underlying Excel serial date, not just "September"
+        const flatData = XLSX.utils.sheet_to_json(worksheet, { raw: true });
+        
+        if (flatData.length > 0) {
+          window.__DEBUG_RAW_TELEMETRY_ROW = flatData[0];
+        }
+
         const parsed = parseTelemetry(flatData);
         if (parsed.length === 0) {
           setError("No se encontraron coordenadas GPS válidas. Revise las columnas (Latitud, Longitud, Velocidad).");
@@ -349,14 +357,9 @@ function App() {
         <div className="bg-red-900/50 p-4 text-xs font-mono text-white whitespace-pre-wrap rounded-xl my-4">
           DEBUG INFO:
           DateRange State: {JSON.stringify(dateRange)}
-          Start Parsed: {dateRange.start ? String(new Date(dateRange.start.split('-')[0], dateRange.start.split('-')[1]-1, dateRange.start.split('-')[2])) : 'N/A'}
-          End Parsed: {dateRange.end ? String(new Date(dateRange.end.split('-')[0], dateRange.end.split('-')[1]-1, dateRange.end.split('-')[2])) : 'N/A'}
-          AllTrips count: {allTrips.length} - FilteredTrips: {filteredTrips.length}
-          Telemetry count: {telemetryData.length} - FilteredTelemetry: {filteredTelemetry.length}
-          Vehicle 16690 original excesos: {telemetryData.find(v => String(v.interno) === '16690')?.excesos}
-          Vehicle 16690 filtered excesos: {filteredTelemetry.find(v => String(v.interno) === '16690')?.excesos}
           Vehicle 16690 original first point date: {telemetryData.find(v => String(v.interno) === '16690')?.puntos[0]?.fecha}
-          Vehicle 16690 original first point parsed: {String(parseCustomDate(telemetryData.find(v => String(v.interno) === '16690')?.puntos[0]?.fecha))}
+          Original telemetry raw row keys: {telemetryData.length > 0 ? JSON.stringify(Object.keys(window.__DEBUG_RAW_TELEMETRY_ROW || {})) : 'N/A'}
+          Original telemetry raw row values: {telemetryData.length > 0 ? JSON.stringify(window.__DEBUG_RAW_TELEMETRY_ROW || {}) : 'N/A'}
         </div>
 
         {(allTrips.length === 0 && telemetryData.length === 0) ? (
