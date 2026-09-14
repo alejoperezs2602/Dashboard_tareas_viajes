@@ -77,7 +77,7 @@ function App() {
     
     return allTrips.filter(t => {
       const d = parseCustomDate(t.fecha);
-      if (!d) return true;
+      if (!d) return false;
       return d >= start && d <= end;
     });
   }, [allTrips, dateRange]);
@@ -92,7 +92,7 @@ function App() {
     return telemetryData.map(veh => {
       const filteredPuntos = veh.puntos.filter(p => {
         const d = parseCustomDate(p.fecha);
-        if (!d) return true; // keep if no date
+        if (!d) return false;
         return d >= start && d <= end;
       });
 

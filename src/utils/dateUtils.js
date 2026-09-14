@@ -63,8 +63,25 @@ export function safeParseFloat(value) {
 
 export function parseCustomDate(dateStr) {
   if (!dateStr) return null;
-  const parts = String(dateStr).trim().replace(/[\/-]/g, '/').split('/');
+  
+  const str = String(dateStr).trim();
+  
+  // Check if it's an Excel serial date (pure numbers)
+  if (/^\d+$/.test(str)) {
+    const serial = parseInt(str, 10);
+    // Excel epoch difference to Unix epoch (25569 days)
+    const ms = (serial - 25569) * 86400 * 1000;
+    const utcDate = new Date(ms);
+    // Return a local Date object matching the UTC year/month/day
+    return new Date(utcDate.getUTCFullYear(), utcDate.getUTCMonth(), utcDate.getUTCDate());
+  }
+
+  // Handle strings with timestamps (e.g. "15/05/2024 14:30") by taking only the date part
+  const datePart = str.split(' ')[0];
+
+  const parts = datePart.replace(/[\/-]/g, '/').split('/');
   if (parts.length !== 3) return null;
+  
   const nums = parts.map(n => parseInt(n, 10));
   // Detect YYYY/MM/DD vs DD/MM/YYYY
   if (nums[0] > 31) return new Date(nums[0], nums[1] - 1, nums[2]);
