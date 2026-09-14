@@ -39,7 +39,7 @@ export default function TelemetryDashboard({ telemetryData }) {
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
       
       {/* Filters and Summary */}
-      <div className="glass-panel p-8 rounded-[2.5rem] relative overflow-hidden">
+      <div className="glass-panel p-8 rounded-[2.5rem] relative z-20">
         <div className="absolute top-0 left-10 w-24 h-1.5 bg-gradient-to-r from-red-400 to-rose-600 rounded-b-xl opacity-80"></div>
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div>

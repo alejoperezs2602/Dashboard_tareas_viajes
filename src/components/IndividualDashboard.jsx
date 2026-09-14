@@ -222,7 +222,7 @@ export default function IndividualDashboard({ allTrips, filters, setFilters, tel
   return (
     <div className="space-y-8">
       {/* 3D Filters Container */}
-      <div className="glass-panel p-8 rounded-[2.5rem] relative overflow-hidden">
+      <div className="glass-panel p-8 rounded-[2.5rem] relative z-20">
         <div className="absolute top-0 left-10 w-24 h-1.5 bg-gradient-to-r from-blue-400 to-indigo-500 rounded-b-xl opacity-80"></div>
         <h3 className="text-2xl font-extrabold text-slate-100 drop-shadow-sm mb-6">Explorador de Viajes</h3>
         
