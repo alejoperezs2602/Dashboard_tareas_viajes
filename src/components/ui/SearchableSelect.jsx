@@ -11,8 +11,17 @@ export default function SearchableSelect({
   theme = "cyan" // "cyan" or "rose" or "blue"
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [inputValue, setInputValue] = useState("");
   const dropdownRef = useRef(null);
+  
+  const selectedOption = options.find(opt => String(opt.value) === String(value));
+
+  // Sync input value with selection when closed or when value changes
+  useEffect(() => {
+    if (!isOpen) {
+      setInputValue(selectedOption ? selectedOption.label : "");
+    }
+  }, [isOpen, selectedOption]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -27,11 +36,13 @@ export default function SearchableSelect({
     };
   }, []);
 
-  const selectedOption = options.find(opt => String(opt.value) === String(value));
-  const displayValue = isOpen ? searchTerm : (selectedOption ? selectedOption.label : "");
-
+  // If the input exactly matches the selected option, show all options (pristine state)
+  // Otherwise, filter based on what the user is typing
+  const isPristine = selectedOption && inputValue === selectedOption.label;
+  const isPlaceholderPristine = !selectedOption && inputValue === "";
+  
   const filteredOptions = options.filter(opt => 
-    opt.label.toLowerCase().includes(searchTerm.toLowerCase())
+    isPristine || isPlaceholderPristine || opt.label.toLowerCase().includes(inputValue.toLowerCase())
   );
 
   const themeClasses = {
@@ -75,18 +86,23 @@ export default function SearchableSelect({
           type="text"
           className={`w-full appearance-none bg-slate-800/70 backdrop-blur-md border ${t.border} ${t.shadow} text-slate-100 rounded-2xl px-5 py-3 outline-none transition-all focus:ring-4 ${t.ring} font-bold cursor-text ${className}`}
           placeholder={placeholder}
-          value={displayValue}
+          value={inputValue}
           onChange={(e) => {
-            setSearchTerm(e.target.value);
+            setInputValue(e.target.value);
             if (!isOpen) setIsOpen(true);
           }}
-          onClick={() => {
+          onClick={(e) => {
             setIsOpen(true);
-            setSearchTerm(""); // Clear search to show all on click
+            e.target.select(); // Select all text on click to allow instant typing replacement
           }}
         />
-        <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-slate-400">
-          <svg className={`w-5 h-5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div 
+          className="absolute inset-y-0 right-4 flex items-center text-slate-400 cursor-pointer"
+          onClick={() => {
+            setIsOpen(!isOpen);
+          }}
+        >
+          <svg className={`w-5 h-5 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7"></path>
           </svg>
         </div>
@@ -103,7 +119,7 @@ export default function SearchableSelect({
                   onClick={() => {
                     onChange(opt.value);
                     setIsOpen(false);
-                    setSearchTerm("");
+                    // Input value syncs automatically via useEffect
                   }}
                   className={`px-4 py-3 rounded-xl cursor-pointer font-semibold transition-colors ${
                     String(opt.value) === String(value)
