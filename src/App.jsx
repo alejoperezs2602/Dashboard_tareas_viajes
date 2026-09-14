@@ -89,14 +89,28 @@ function App() {
     const end = dateRange.end ? parseLocalYMD(dateRange.end) : new Date('2100-01-01T00:00:00');
     end.setHours(23, 59, 59, 999);
     
-    return telemetryData.map(veh => ({
-      ...veh,
-      puntos: veh.puntos.filter(p => {
+    return telemetryData.map(veh => {
+      const filteredPuntos = veh.puntos.filter(p => {
         const d = parseCustomDate(p.fecha);
         if (!d) return true; // keep if no date
         return d >= start && d <= end;
-      })
-    })).filter(veh => veh.puntos.length > 0);
+      });
+
+      let excesos = 0;
+      const conductoresSet = new Set();
+
+      filteredPuntos.forEach(p => {
+        if (p.esExceso) excesos++;
+        if (p.conductor) conductoresSet.add(p.conductor);
+      });
+
+      return {
+        ...veh,
+        puntos: filteredPuntos,
+        excesos: excesos,
+        conductores: Array.from(conductoresSet)
+      };
+    }).filter(veh => veh.puntos.length > 0);
   }, [telemetryData, dateRange]);
 
   const handleDrillDown = (interno, ruta = 'ALL') => {
