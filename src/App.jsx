@@ -520,7 +520,7 @@ function App() {
                   />
                 )}
                 {activeTab === 'telemetry' && filteredTelemetry.length > 0 && (
-                  <TelemetryDashboard telemetryData={filteredTelemetry} />
+                  <TelemetryDashboard telemetryData={filteredTelemetry} allTrips={filteredTrips} />
                 )}
               </motion.div>
             </AnimatePresence>

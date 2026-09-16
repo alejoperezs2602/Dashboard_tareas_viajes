@@ -1,6 +1,7 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Popup, useMap } from 'react-leaflet';
 import Tilt from 'react-parallax-tilt';
+import html2canvas from 'html2canvas';
 import { SPEED_LIMIT_KMH, DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM, MAP_TILE_URL, MAP_ATTRIBUTION, SPEEDING_MARKER_STYLE, ROUTE_POLYLINE_STYLE } from '../constants/index.js';
 import SearchableSelect from './ui/SearchableSelect.jsx';
 
@@ -14,9 +15,11 @@ function MapController({ targetPoint }) {
   return null;
 }
 
-export default function TelemetryDashboard({ telemetryData }) {
+export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
   const [selectedInterno, setSelectedInterno] = useState('');
   const [selectedAlert, setSelectedAlert] = useState(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const reportRef = useRef(null);
 
   const vehiclesList = useMemo(() => {
     return [...telemetryData].sort((a, b) => b.excesos - a.excesos);
@@ -26,6 +29,28 @@ export default function TelemetryDashboard({ telemetryData }) {
     return telemetryData.find(v => v.interno === selectedInterno) || null;
   }, [telemetryData, selectedInterno]);
 
+  const reportData = useMemo(() => {
+    if (!selectedVehicleData || selectedVehicleData.excesos === 0) return [];
+    
+    // Enrich each alert with the corresponding trip from allTrips
+    return selectedVehicleData.puntos.filter(p => p.esExceso).map(alert => {
+      let matchedTripLabel = 'Sin viaje registrado';
+      if (allTrips.length > 0) {
+        // Match by internal number and date
+        const possibleTrips = allTrips.filter(t => 
+          String(t.interno) === String(selectedVehicleData.interno) && 
+          t.fecha === alert.fecha
+        );
+        if (possibleTrips.length > 0) {
+          // If there are multiple trips in a day, ideally we'd check if alert.hora is within hora_est/hora_real.
+          // For now, we take the first matching trip on that date.
+          matchedTripLabel = `${possibleTrips[0].viaje} | ${possibleTrips[0].ruta}`;
+        }
+      }
+      return { ...alert, viajeStr: matchedTripLabel };
+    });
+  }, [selectedVehicleData, allTrips]);
+
   // Si hay un vehículo seleccionado, calculamos el centro inicial del mapa
   const mapCenter = useMemo(() => {
     if (selectedVehicleData && selectedVehicleData.puntos.length > 0) {
@@ -34,6 +59,34 @@ export default function TelemetryDashboard({ telemetryData }) {
     }
     return DEFAULT_MAP_CENTER;
   }, [selectedVehicleData]);
+
+  const handleDownloadReport = async () => {
+    if (!reportRef.current) return;
+    setIsGenerating(true);
+    
+    try {
+      // Temporarily make the report visible for capture if needed, 
+      // html2canvas can capture absolute positioned elements even if off-screen (but not display: none)
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 2, // High resolution
+        backgroundColor: '#0f172a', // slate-900 background for a sleek dark mode look
+        logging: false
+      });
+      
+      const image = canvas.toDataURL("image/png");
+      const link = document.createElement('a');
+      link.href = image;
+      link.download = `Reporte_Velocidad_Vehiculo_${selectedInterno}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error("Error generating report:", err);
+      alert("Hubo un error al generar el reporte de imagen.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
@@ -80,14 +133,31 @@ export default function TelemetryDashboard({ telemetryData }) {
           
           {/* Alertas Panel */}
           <div className="lg:col-span-1 glass-panel p-8 rounded-[2.5rem] flex flex-col h-[600px]">
-             <div className="mb-6 border-b border-slate-300/30 pb-4">
-                <h3 className="text-2xl font-extrabold text-slate-100 drop-shadow-sm flex items-center">
-                  <span className="w-4 h-4 bg-rose-500 rounded-full mr-3 shadow-sm animate-pulse"></span>
-                  Alertas
-                </h3>
-                <p className="text-sm font-medium text-slate-400/80 mt-1">
-                  {selectedVehicleData.excesos} registros de velocidad alta
-                </p>
+             <div className="mb-6 border-b border-slate-300/30 pb-4 flex justify-between items-start">
+                <div>
+                  <h3 className="text-2xl font-extrabold text-slate-100 drop-shadow-sm flex items-center">
+                    <span className="w-4 h-4 bg-rose-500 rounded-full mr-3 shadow-sm animate-pulse"></span>
+                    Alertas
+                  </h3>
+                  <p className="text-sm font-medium text-slate-400/80 mt-1">
+                    {selectedVehicleData.excesos} registros de velocidad alta
+                  </p>
+                </div>
+                
+                {selectedVehicleData.excesos > 0 && (
+                  <button 
+                    onClick={handleDownloadReport}
+                    disabled={isGenerating}
+                    className="p-2 rounded-xl bg-slate-800 border border-slate-600 hover:bg-rose-500 hover:border-rose-400 hover:text-white transition-all text-slate-300 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed group"
+                    title="Descargar Reporte"
+                  >
+                    {isGenerating ? (
+                      <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    )}
+                  </button>
+                )}
              </div>
              
              <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
@@ -180,6 +250,66 @@ export default function TelemetryDashboard({ telemetryData }) {
           
         </div>
       )}
+
+      {/* Hidden Report for Export */}
+      <div className="absolute -left-[9999px] top-0 pointer-events-none">
+        <div ref={reportRef} className="w-[800px] bg-slate-900 p-10 rounded-3xl border border-slate-700 flex flex-col gap-6 text-slate-100">
+          <div className="border-b border-slate-700 pb-6 flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center">
+                <span className="w-5 h-5 bg-rose-500 rounded-full mr-3 shadow-[0_0_15px_rgba(244,63,94,0.6)]"></span>
+                Reporte de Velocidad
+              </h1>
+              <p className="text-slate-400 mt-2 font-medium">Historial de alertas - Vehículo <span className="text-rose-400 font-bold">{selectedInterno}</span></p>
+            </div>
+            <div className="text-right">
+              <p className="text-xl font-bold text-white">{selectedVehicleData?.excesos || 0}</p>
+              <p className="text-xs text-slate-400 uppercase tracking-wider font-bold">Total Excesos</p>
+            </div>
+          </div>
+
+          <div className="flex-1 bg-slate-800/50 rounded-2xl p-6 border border-slate-700/50">
+            {reportData.length > 0 ? (
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="text-slate-400 border-b border-slate-700">
+                    <th className="pb-3 font-bold uppercase">Fecha y Hora</th>
+                    <th className="pb-3 font-bold uppercase">Velocidad</th>
+                    <th className="pb-3 font-bold uppercase">Conductor</th>
+                    <th className="pb-3 font-bold uppercase text-right">Viaje / Ruta</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-700/50">
+                  {reportData.map((p, idx) => (
+                    <tr key={idx} className="hover:bg-slate-700/30 transition-colors">
+                      <td className="py-3 text-slate-300 font-medium">
+                        {p.fecha} <br/><span className="text-xs text-slate-500">{p.hora}</span>
+                      </td>
+                      <td className="py-3">
+                        <span className="text-rose-400 font-black">{p.velocidad} km/h</span>
+                      </td>
+                      <td className="py-3 text-slate-300">
+                        {p.conductor}
+                      </td>
+                      <td className="py-3 text-right">
+                        <span className="bg-slate-700/50 text-slate-300 text-xs px-2 py-1 rounded-lg border border-slate-600">
+                          {p.viajeStr}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="text-center text-slate-500 font-medium py-10">Sin alertas registradas para este vehículo.</p>
+            )}
+          </div>
+          
+          <div className="text-center text-xs font-bold text-slate-600 uppercase tracking-widest mt-2">
+            Generado automáticamente por SOTRAPPAL - {new Date().toLocaleDateString()}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
