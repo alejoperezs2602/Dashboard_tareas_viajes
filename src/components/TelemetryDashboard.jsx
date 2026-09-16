@@ -64,20 +64,21 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
     setIsGenerating(true);
     
     try {
-      // Dynamic import to avoid ESM/CJS issues in Vite
-      const html2canvasModule = await import('html2canvas');
-      const generateCanvas = html2canvasModule.default || html2canvasModule;
+      // Usamos html-to-image en lugar de html2canvas porque Tailwind v4 
+      // usa colores "oklch" de forma nativa, lo cual rompe a html2canvas.
+      const htmlToImage = await import('html-to-image');
 
-      const canvas = await generateCanvas(reportRef.current, {
-        scale: 2, // High resolution
+      const dataUrl = await htmlToImage.toPng(reportRef.current, {
+        pixelRatio: 2, // Alta resolución
         backgroundColor: '#0f172a', 
-        logging: true, // Enable logging temporarily to catch issues
-        useCORS: true
+        style: {
+          visibility: 'visible', // Forzamos a que sea visible en el render
+          transform: 'none'
+        }
       });
       
-      const image = canvas.toDataURL("image/png");
       const link = document.createElement('a');
-      link.href = image;
+      link.href = dataUrl;
       link.download = `Reporte_Velocidad_Vehiculo_${selectedInterno}.png`;
       document.body.appendChild(link);
       link.click();
