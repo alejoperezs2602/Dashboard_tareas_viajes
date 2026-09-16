@@ -254,8 +254,8 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
       )}
 
       {/* Hidden Report for Export */}
-      <div style={{ position: 'absolute', top: 0, left: 0, zIndex: -50, pointerEvents: 'none', visibility: 'hidden' }}>
-        <div ref={reportRef} style={{ visibility: 'visible' }} className="w-[800px] bg-slate-900 p-10 rounded-3xl border border-slate-700 flex flex-col gap-6 text-slate-100">
+      <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
+        <div ref={reportRef} className="w-[800px] bg-slate-900 p-10 rounded-3xl border border-slate-700 flex flex-col gap-6 text-slate-100">
           <div className="border-b border-slate-700 pb-6 flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center">
