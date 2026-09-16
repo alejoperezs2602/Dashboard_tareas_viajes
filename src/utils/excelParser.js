@@ -1,4 +1,4 @@
-import { normalizeDateString } from './dateUtils.js';
+import { normalizeDateString, normalizeTimeString } from './dateUtils.js';
 
 export function parseAllTrips(matrix) {
   let allTrips = [];
@@ -65,8 +65,8 @@ export function parseAllTrips(matrix) {
               let punto = {
                   orden: parseInt(ordenVal),
                   puesto: row[colMap["PUESTO DE CONTROL"]] || "",
-                  hora_est: row[colMap["HORA ESTIMADA DE LLEGADA"]] || "",
-                  hora_real: row[colMap["HORA REAL DE LLEGADA"]] || "",
+                  hora_est: normalizeTimeString(row[colMap["HORA ESTIMADA DE LLEGADA"]]),
+                  hora_real: normalizeTimeString(row[colMap["HORA REAL DE LLEGADA"]]),
                   conductor: cond,
                   diferencia: isNaN(diff) ? 0 : diff,
                   distancia: isNaN(dist) ? 0 : dist
