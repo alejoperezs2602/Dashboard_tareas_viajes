@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Popup, useMap } from 'react-leaflet';
 import Tilt from 'react-parallax-tilt';
-import html2canvas from 'html2canvas';
 import { SPEED_LIMIT_KMH, DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM, MAP_TILE_URL, MAP_ATTRIBUTION, SPEEDING_MARKER_STYLE, ROUTE_POLYLINE_STYLE } from '../constants/index.js';
 import SearchableSelect from './ui/SearchableSelect.jsx';
 
@@ -65,12 +64,15 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
     setIsGenerating(true);
     
     try {
-      // Temporarily make the report visible for capture if needed, 
-      // html2canvas can capture absolute positioned elements even if off-screen (but not display: none)
-      const canvas = await html2canvas(reportRef.current, {
+      // Dynamic import to avoid ESM/CJS issues in Vite
+      const html2canvasModule = await import('html2canvas');
+      const generateCanvas = html2canvasModule.default || html2canvasModule;
+
+      const canvas = await generateCanvas(reportRef.current, {
         scale: 2, // High resolution
-        backgroundColor: '#0f172a', // slate-900 background for a sleek dark mode look
-        logging: false
+        backgroundColor: '#0f172a', 
+        logging: true, // Enable logging temporarily to catch issues
+        useCORS: true
       });
       
       const image = canvas.toDataURL("image/png");
@@ -82,7 +84,7 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
       document.body.removeChild(link);
     } catch (err) {
       console.error("Error generating report:", err);
-      alert("Hubo un error al generar el reporte de imagen.");
+      alert(`Hubo un error al generar el reporte de imagen: ${err.message || err}`);
     } finally {
       setIsGenerating(false);
     }
@@ -252,8 +254,8 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
       )}
 
       {/* Hidden Report for Export */}
-      <div className="absolute -left-[9999px] top-0 pointer-events-none">
-        <div ref={reportRef} className="w-[800px] bg-slate-900 p-10 rounded-3xl border border-slate-700 flex flex-col gap-6 text-slate-100">
+      <div style={{ position: 'absolute', top: 0, left: 0, zIndex: -50, pointerEvents: 'none', visibility: 'hidden' }}>
+        <div ref={reportRef} style={{ visibility: 'visible' }} className="w-[800px] bg-slate-900 p-10 rounded-3xl border border-slate-700 flex flex-col gap-6 text-slate-100">
           <div className="border-b border-slate-700 pb-6 flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center">
