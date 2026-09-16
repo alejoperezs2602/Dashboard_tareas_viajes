@@ -1,4 +1,6 @@
 import { SPEED_LIMIT_KMH } from '../constants/index.js';
+import { normalizeDateString, normalizeTimeString } from './dateUtils.js';
+
 export function parseTelemetry(data) {
   // data comes from XLSX.utils.sheet_to_json(worksheet) (array of objects)
   // We want to group by "Numero interno"
@@ -32,8 +34,8 @@ export function parseTelemetry(data) {
     }
 
     // Normalizar formato de fecha (eliminar espacios)
-    const fecha = rawFecha ? String(rawFecha).trim() : null;
-    const hora = rawHora ? String(rawHora).trim() : null;
+    const fecha = rawFecha ? normalizeDateString(rawFecha) : null;
+    const hora = rawHora ? normalizeTimeString(rawHora) : (rawFecha && /^\d+(\.\d+)?$/.test(String(rawFecha)) ? normalizeTimeString(rawFecha) : null);
 
     // Solo procesar si tenemos coordenadas válidas
     if (isNaN(lat) || isNaN(lng)) return;

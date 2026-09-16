@@ -1,3 +1,5 @@
+import { normalizeDateString } from './dateUtils.js';
+
 export function parseAllTrips(matrix) {
   let allTrips = [];
   if (!matrix || !Array.isArray(matrix) || matrix.length === 0) return allTrips;
@@ -35,7 +37,7 @@ export function parseAllTrips(matrix) {
                   if (val === "CODIGO VIAJE") currentTrip.viaje = nextVal;
                   if (val === "PLACA") currentTrip.placa = nextVal;
                   if (val === "RUTA") currentTrip.ruta = nextVal;
-                  if (val === "FECHA DEL VIAJE") currentTrip.fecha = nextVal;
+                  if (val === "FECHA DEL VIAJE") currentTrip.fecha = normalizeDateString(nextVal);
                   if (val === "NUMERO INTERNO") currentTrip.interno = nextVal;
                   if (val === "CODIGO DE RODAMIENTO") currentTrip.rodamiento = nextVal;
               }

@@ -3,8 +3,15 @@
  * Handles formats: "HH:mm:ss", "HH:mm", "HH:mm:ss AM/PM", "HH:mm:ss a. m./p. m."
  */
 export function timeToMs(timeStr) {
-  if (!timeStr) return 0;
+  if (timeStr === undefined || timeStr === null || timeStr === '') return 0;
   let t = String(timeStr).trim();
+  
+  // Handle Excel float fraction (e.g. 0.6041)
+  if (/^\d+(\.\d+)?$/.test(t)) {
+    let serial = parseFloat(t);
+    let fraction = serial - Math.floor(serial);
+    return Math.round(fraction * 86400 * 1000);
+  }
   
   // Handle Spanish AM/PM formats: "p. m.", "a. m.", "p.m.", "a.m."
   const isPM = /p\.?\s*m\.?/i.test(t) || t.toUpperCase().includes('PM');
@@ -116,4 +123,48 @@ export function parseCustomDate(dateStr) {
   if (!isNaN(fallback.getTime())) return fallback;
 
   return null;
+}
+
+/**
+ * Normalizes any date string (including Excel serials) into a clean DD/MM/YYYY format for display.
+ */
+export function normalizeDateString(dateStr) {
+  if (dateStr === undefined || dateStr === null || dateStr === '') return '';
+  const d = parseCustomDate(dateStr);
+  if (!d) return String(dateStr);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+/**
+ * Normalizes any time string (including Excel time fractions) into a clean HH:mm:ss format for display.
+ */
+export function normalizeTimeString(timeStr) {
+  if (timeStr === undefined || timeStr === null || timeStr === '') return '';
+  const str = String(timeStr).trim();
+  
+  // If it's a purely numeric Excel float/serial
+  if (/^\d+(\.\d+)?$/.test(str)) {
+    let serial = parseFloat(str);
+    let fraction = serial - Math.floor(serial);
+    
+    let totalSeconds = Math.round(fraction * 86400);
+    let hours = Math.floor(totalSeconds / 3600);
+    totalSeconds %= 3600;
+    let minutes = Math.floor(totalSeconds / 60);
+    let seconds = totalSeconds % 60;
+    
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+  
+  // If it's a combined datetime string and we just want time
+  if (str.includes(' ')) {
+    const parts = str.split(' ');
+    // usually the last part is time
+    return parts[parts.length - 1];
+  }
+  
+  return str;
 }
