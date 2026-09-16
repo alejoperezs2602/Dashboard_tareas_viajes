@@ -249,10 +249,55 @@ body.light-mode ::placeholder {
   color: rgba(100, 116, 139, 0.7) !important;
 }
 
-/* Marcadores "·" en tablas */
+/* Marcadores "#" en tablas */
 body.light-mode .text-slate-600 {
   color: #334155 !important;
 }
+
+/* ============================================================
+   COLOR DE ACENTOS Y TEXTOS VIBRANTES (Mejorando contraste)
+   ============================================================ */
+body.light-mode .text-cyan-400,
+body.light-mode .text-cyan-300 {
+  color: #0e7490 !important; /* cyan-700 */
+}
+body.light-mode .text-blue-400,
+body.light-mode .text-blue-300 {
+  color: #1d4ed8 !important; /* blue-700 */
+}
+body.light-mode .text-emerald-500,
+body.light-mode .text-emerald-400,
+body.light-mode .text-emerald-300 {
+  color: #047857 !important; /* emerald-700 */
+}
+body.light-mode .text-amber-400,
+body.light-mode .text-amber-300 {
+  color: #b45309 !important; /* amber-700 */
+}
+body.light-mode .text-rose-500,
+body.light-mode .text-rose-400,
+body.light-mode .text-rose-300 {
+  color: #be123c !important; /* rose-700 */
+}
+body.light-mode .text-indigo-400,
+body.light-mode .text-indigo-300 {
+  color: #4338ca !important; /* indigo-700 */
+}
+
+/* Ajustes a gradientes y fondos translúcidos en componentes */
+body.light-mode .from-blue-900\/40,
+body.light-mode .from-emerald-900\/40,
+body.light-mode .from-rose-900\/40,
+body.light-mode .from-slate-800\/50,
+body.light-mode .from-cyan-900\/40 {
+  background-image: none !important;
+  background-color: rgba(248, 250, 252, 0.9) !important;
+}
+
+body.light-mode .border-blue-500\/30 { border-color: rgba(29, 78, 216, 0.2) !important; }
+body.light-mode .border-emerald-500\/30 { border-color: rgba(4, 120, 87, 0.2) !important; }
+body.light-mode .border-rose-500\/30 { border-color: rgba(190, 18, 60, 0.2) !important; }
+body.light-mode .border-cyan-500\/30 { border-color: rgba(14, 116, 144, 0.2) !important; }
 
 /* Blobs en light mode: más suaves y de colores más claros */
 body.light-mode .bg-cyan-500\/40 {
