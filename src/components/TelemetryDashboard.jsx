@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Popup, useMap } from 'react-leaflet';
 import Tilt from 'react-parallax-tilt';
 import { SPEED_LIMIT_KMH, DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM, MAP_TILE_URL, MAP_ATTRIBUTION, SPEEDING_MARKER_STYLE, ROUTE_POLYLINE_STYLE } from '../constants/index.js';
+import { timeToMs } from '../utils/dateUtils.js';
 import SearchableSelect from './ui/SearchableSelect.jsx';
 
 function MapController({ targetPoint }) {
@@ -14,10 +15,32 @@ function MapController({ targetPoint }) {
   return null;
 }
 
+const fetchAddress = async (lat, lng) => {
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16`, {
+      headers: {
+        'Accept-Language': 'es'
+      }
+    });
+    const data = await res.json();
+    if (data && data.address) {
+      const { road, suburb, city, town, village, county } = data.address;
+      const parts = [road, suburb, city || town || village || county].filter(Boolean);
+      return parts.length > 0 ? parts.join(', ') : (data.display_name || 'Ubicación desconocida');
+    }
+    return 'Ubicación desconocida';
+  } catch (err) {
+    console.error("Error geocoding:", err);
+    return 'Error de conexión';
+  }
+};
+
 export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
   const [selectedInterno, setSelectedInterno] = useState('');
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generationStatus, setGenerationStatus] = useState('');
+  const [resolvedAddresses, setResolvedAddresses] = useState({});
   const reportRef = useRef(null);
 
   const vehiclesList = useMemo(() => {
@@ -34,16 +57,54 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
     // Enrich each alert with the corresponding trip from allTrips
     return selectedVehicleData.puntos.filter(p => p.esExceso).map(alert => {
       let matchedTripLabel = 'Sin viaje registrado';
+      
       if (allTrips.length > 0) {
         // Match by internal number and date
         const possibleTrips = allTrips.filter(t => 
           String(t.interno) === String(selectedVehicleData.interno) && 
           t.fecha === alert.fecha
         );
+        
         if (possibleTrips.length > 0) {
-          // If there are multiple trips in a day, ideally we'd check if alert.hora is within hora_est/hora_real.
-          // For now, we take the first matching trip on that date.
-          matchedTripLabel = `${possibleTrips[0].viaje} | ${possibleTrips[0].ruta}`;
+          const alertTimeMs = timeToMs(alert.hora);
+          let exactTrip = null;
+          
+          for (const trip of possibleTrips) {
+            if (trip.puntos && trip.puntos.length > 0) {
+              const firstPoint = trip.puntos[0];
+              const lastPoint = trip.puntos[trip.puntos.length - 1];
+              
+              const startStr = firstPoint.hora_real || firstPoint.hora_est;
+              const endStr = lastPoint.hora_real || lastPoint.hora_est;
+              
+              const startMs = timeToMs(startStr);
+              const endMs = timeToMs(endStr);
+              
+              // 30 min buffer before and after route
+              const BUFFER_MS = 30 * 60 * 1000; 
+              
+              if (startMs <= endMs) {
+                // Normal route (doesn't cross midnight)
+                if (alertTimeMs >= (startMs - BUFFER_MS) && alertTimeMs <= (endMs + BUFFER_MS)) {
+                  exactTrip = trip;
+                  break;
+                }
+              } else {
+                // Route crosses midnight
+                if (alertTimeMs >= (startMs - BUFFER_MS) || alertTimeMs <= (endMs + BUFFER_MS)) {
+                  exactTrip = trip;
+                  break;
+                }
+              }
+            }
+          }
+          
+          if (exactTrip) {
+            matchedTripLabel = `${exactTrip.viaje} | ${exactTrip.ruta}`;
+          } else {
+            // Fallback to the first route of the day, but indicate it occurred outside the recorded schedule
+            matchedTripLabel = `${possibleTrips[0].viaje} | ${possibleTrips[0].ruta} (Fuera de horario)`;
+          }
         }
       }
       return { ...alert, viajeStr: matchedTripLabel };
@@ -62,10 +123,34 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
   const handleDownloadReport = async () => {
     if (!reportRef.current) return;
     setIsGenerating(true);
+    setGenerationStatus('Iniciando...');
     
     try {
-      // Usamos html-to-image en lugar de html2canvas porque Tailwind v4 
-      // usa colores "oklch" de forma nativa, lo cual rompe a html2canvas.
+      // 1. Fetch addresses sequentially to respect Nominatim limits (1 req/sec)
+      const newAddresses = { ...resolvedAddresses };
+      let hasNewAddresses = false;
+      
+      for (let i = 0; i < reportData.length; i++) {
+        const p = reportData[i];
+        if (!newAddresses[i]) {
+          setGenerationStatus(`Obteniendo dirección ${i + 1} de ${reportData.length}...`);
+          newAddresses[i] = await fetchAddress(p.lat, p.lng);
+          hasNewAddresses = true;
+          // Delay to respect OpenStreetMap API limit
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+      
+      if (hasNewAddresses) {
+        setResolvedAddresses(newAddresses);
+        setGenerationStatus('Generando imagen...');
+        // Wait for React to render the new state in the DOM
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } else {
+        setGenerationStatus('Generando imagen...');
+      }
+
+      // 2. Generate Image
       const htmlToImage = await import('html-to-image');
 
       const dataUrl = await htmlToImage.toPng(reportRef.current, {
@@ -88,6 +173,7 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
       alert(`Hubo un error al generar el reporte de imagen: ${err.message || err}`);
     } finally {
       setIsGenerating(false);
+      setGenerationStatus('');
     }
   };
 
@@ -151,11 +237,14 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
                   <button 
                     onClick={handleDownloadReport}
                     disabled={isGenerating}
-                    className="p-2 rounded-xl bg-slate-800 border border-slate-600 hover:bg-rose-500 hover:border-rose-400 hover:text-white transition-all text-slate-300 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed group"
+                    className="px-3 py-2 rounded-xl bg-slate-800 border border-slate-600 hover:bg-rose-500 hover:border-rose-400 hover:text-white transition-all text-slate-300 flex items-center justify-center disabled:opacity-80 disabled:cursor-wait group gap-2"
                     title="Descargar Reporte"
                   >
                     {isGenerating ? (
-                      <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                      <>
+                        <svg className="w-4 h-4 animate-spin text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                        <span className="text-xs font-bold text-slate-300">{generationStatus || 'Cargando...'}</span>
+                      </>
                     ) : (
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                     )}
@@ -256,7 +345,7 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
 
       {/* Hidden Report for Export */}
       <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
-        <div ref={reportRef} className="w-[800px] bg-slate-900 p-10 rounded-3xl border border-slate-700 flex flex-col gap-6 text-slate-100">
+        <div ref={reportRef} className="w-[950px] bg-slate-900 p-10 rounded-3xl border border-slate-700 flex flex-col gap-6 text-slate-100">
           <div className="border-b border-slate-700 pb-6 flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center">
@@ -278,24 +367,24 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
                   <tr className="text-slate-400 border-b border-slate-700">
                     <th className="pb-3 font-bold uppercase">Fecha y Hora</th>
                     <th className="pb-3 font-bold uppercase">Velocidad</th>
-                    <th className="pb-3 font-bold uppercase">Conductor</th>
+                    <th className="pb-3 font-bold uppercase">Ubicación Aproximada</th>
                     <th className="pb-3 font-bold uppercase text-right">Viaje / Ruta</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-700/50">
                   {reportData.map((p, idx) => (
                     <tr key={idx} className="hover:bg-slate-700/30 transition-colors">
-                      <td className="py-3 text-slate-300 font-medium">
+                      <td className="py-3 text-slate-300 font-medium whitespace-nowrap">
                         {p.fecha} <br/><span className="text-xs text-slate-500">{p.hora}</span>
                       </td>
-                      <td className="py-3">
+                      <td className="py-3 whitespace-nowrap">
                         <span className="text-rose-400 font-black">{p.velocidad} km/h</span>
                       </td>
-                      <td className="py-3 text-slate-300">
-                        {p.conductor}
+                      <td className="py-3 text-slate-400 text-xs pr-4">
+                        {resolvedAddresses[idx] || `${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`}
                       </td>
                       <td className="py-3 text-right">
-                        <span className="bg-slate-700/50 text-slate-300 text-xs px-2 py-1 rounded-lg border border-slate-600">
+                        <span className="bg-slate-700/50 text-slate-300 text-xs px-2 py-1 rounded-lg border border-slate-600 inline-block">
                           {p.viajeStr}
                         </span>
                       </td>
