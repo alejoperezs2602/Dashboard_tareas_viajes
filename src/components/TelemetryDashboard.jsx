@@ -155,7 +155,7 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
 
       const dataUrl = await htmlToImage.toPng(reportRef.current, {
         pixelRatio: 2, // Alta resolución
-        backgroundColor: '#0f172a', 
+        backgroundColor: '#ffffff', 
         style: {
           visibility: 'visible', // Forzamos a que sea visible en el render
           transform: 'none'
@@ -345,46 +345,46 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
 
       {/* Hidden Report for Export */}
       <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
-        <div ref={reportRef} className="w-[950px] bg-slate-900 p-10 rounded-3xl border border-slate-700 flex flex-col gap-6 text-slate-100">
-          <div className="border-b border-slate-700 pb-6 flex justify-between items-center">
+        <div ref={reportRef} className="w-[950px] bg-white p-10 rounded-3xl border border-slate-200 flex flex-col gap-6 text-slate-800">
+          <div className="border-b border-slate-200 pb-6 flex justify-between items-center">
             <div>
-              <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center">
-                <span className="w-5 h-5 bg-rose-500 rounded-full mr-3 shadow-[0_0_15px_rgba(244,63,94,0.6)]"></span>
+              <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight flex items-center">
+                <span className="w-5 h-5 bg-rose-600 rounded-full mr-3 shadow-[0_0_15px_rgba(225,29,72,0.4)]"></span>
                 Reporte de Velocidad
               </h1>
-              <p className="text-slate-400 mt-2 font-medium">Historial de alertas - Vehículo <span className="text-rose-400 font-bold">{selectedInterno}</span></p>
+              <p className="text-slate-500 mt-2 font-medium">Historial de alertas - Vehículo <span className="text-rose-600 font-bold">{selectedInterno}</span></p>
             </div>
             <div className="text-right">
-              <p className="text-xl font-bold text-white">{selectedVehicleData?.excesos || 0}</p>
-              <p className="text-xs text-slate-400 uppercase tracking-wider font-bold">Total Excesos</p>
+              <p className="text-2xl font-black text-slate-900">{selectedVehicleData?.excesos || 0}</p>
+              <p className="text-xs text-slate-500 uppercase tracking-wider font-bold">Total Excesos</p>
             </div>
           </div>
 
-          <div className="flex-1 bg-slate-800/50 rounded-2xl p-6 border border-slate-700/50">
+          <div className="flex-1 bg-slate-50 rounded-2xl p-6 border border-slate-200">
             {reportData.length > 0 ? (
               <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="text-slate-400 border-b border-slate-700">
+                  <tr className="text-slate-500 border-b border-slate-300">
                     <th className="pb-3 font-bold uppercase">Fecha y Hora</th>
                     <th className="pb-3 font-bold uppercase">Velocidad</th>
                     <th className="pb-3 font-bold uppercase">Ubicación Aproximada</th>
                     <th className="pb-3 font-bold uppercase text-right">Viaje / Ruta</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-700/50">
+                <tbody className="divide-y divide-slate-200">
                   {reportData.map((p, idx) => (
-                    <tr key={idx} className="hover:bg-slate-700/30 transition-colors">
-                      <td className="py-3 text-slate-300 font-medium whitespace-nowrap">
-                        {p.fecha} <br/><span className="text-xs text-slate-500">{p.hora}</span>
+                    <tr key={idx} className="hover:bg-slate-100 transition-colors">
+                      <td className="py-3 text-slate-700 font-semibold whitespace-nowrap">
+                        {p.fecha} <br/><span className="text-xs text-slate-500 font-medium">{p.hora}</span>
                       </td>
                       <td className="py-3 whitespace-nowrap">
-                        <span className="text-rose-400 font-black">{p.velocidad} km/h</span>
+                        <span className="text-rose-600 font-black text-base">{p.velocidad} km/h</span>
                       </td>
-                      <td className="py-3 text-slate-400 text-xs pr-4">
+                      <td className="py-3 text-slate-600 text-xs pr-4 font-medium">
                         {resolvedAddresses[idx] || `${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`}
                       </td>
                       <td className="py-3 text-right">
-                        <span className="bg-slate-700/50 text-slate-300 text-xs px-2 py-1 rounded-lg border border-slate-600 inline-block">
+                        <span className="bg-white text-slate-700 font-bold text-xs px-2 py-1 rounded-lg border border-slate-300 inline-block shadow-sm">
                           {p.viajeStr}
                         </span>
                       </td>
@@ -397,7 +397,7 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
             )}
           </div>
           
-          <div className="text-center text-xs font-bold text-slate-600 uppercase tracking-widest mt-2">
+          <div className="text-center text-xs font-bold text-slate-400 uppercase tracking-widest mt-2">
             Generado automáticamente por SOTRAPPAL - {new Date().toLocaleDateString()}
           </div>
         </div>
