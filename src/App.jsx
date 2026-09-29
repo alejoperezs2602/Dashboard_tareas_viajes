@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { parseAllTrips } from './utils/excelParser';
 import { parseTelemetry } from './utils/telemetryParser';
+import { parsePlanillas } from './utils/planillasParser';
 import { parseCustomDate } from './utils/dateUtils.js';
 import { saveData, loadData, clearAllData } from './utils/storage.js';
 import { generateReport } from './utils/pdfExport.js';
@@ -17,11 +18,13 @@ import CommandPalette from './components/CommandPalette';
 
 function App() {
   const [allTrips, setAllTrips] = useState([]);
+  const [planillasMap, setPlanillasMap] = useState(null); // null = not uploaded yet
   const [telemetryData, setTelemetryData] = useState([]);
   const [activeTab, setActiveTab] = useState('general');
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isOpsExpanded, setIsOpsExpanded] = useState(false);
   const [isLightMode, setIsLightMode] = useState(() => {
     return localStorage.getItem('theme') === 'light';
   });
@@ -84,6 +87,32 @@ function App() {
       return d >= start && d <= end;
     });
   }, [allTrips, dateRange]);
+
+  /**
+   * validatedTrips: applies the Planillas Intermunicipales filter.
+   * - If planillasMap is null (file not uploaded), all trips pass through unchanged.
+   * - If planillasMap is loaded:
+   *     • Only trips whose `viaje` code exists in the map are kept.
+   *     • The conductor for each kept trip is overridden with the one from planillas.
+   */
+  const validatedTrips = useMemo(() => {
+    if (!planillasMap) return filteredTrips; // No filter applied
+    
+    return filteredTrips
+      .filter(t => planillasMap.has(String(t.viaje).trim()))
+      .map(t => {
+        const conductorFromPlanilla = planillasMap.get(String(t.viaje).trim());
+        // Override conductor in trip-level metadata and in every checkpoint
+        return {
+          ...t,
+          conductoresArray: conductorFromPlanilla ? [conductorFromPlanilla] : t.conductoresArray,
+          puntos: t.puntos.map(p => ({
+            ...p,
+            conductor: conductorFromPlanilla || p.conductor
+          }))
+        };
+      });
+  }, [filteredTrips, planillasMap]);
 
   const filteredTelemetry = useMemo(() => {
     if (!dateRange.start && !dateRange.end) return telemetryData;
@@ -206,10 +235,49 @@ function App() {
     e.target.value = null; // reset
   };
 
+  const handlePlanillasUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setError('');
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      setError(`El archivo excede el límite de ${MAX_FILE_SIZE_MB}MB`);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      setIsLoading(true);
+      try {
+        const data = new Uint8Array(ev.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const flatData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
+
+        const parsed = parsePlanillas(flatData);
+        if (parsed.size === 0) {
+          setError('No se encontraron registros en Planillas Intermunicipales. Verifique que el archivo tenga la columna "Viaje".');
+        } else {
+          setPlanillasMap(parsed);
+          saveData('planillasMap', Array.from(parsed.entries()));
+        }
+        setIsLoading(false);
+      } catch (err) {
+        console.error(err);
+        setError('Ocurrió un error al procesar el archivo de Planillas Intermunicipales.');
+        setIsLoading(false);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = null;
+  };
+
   const handleClearData = async () => {
     await clearAllData();
     setAllTrips([]);
     setTelemetryData([]);
+    setPlanillasMap(null);
     setActiveTab('general');
     setError('');
     setGlobalFilters({ ruta: 'ALL', conductor: 'ALL', interno: 'ALL', viajeIndex: '' });
@@ -276,37 +344,73 @@ function App() {
                 </button>
             </div>
             
-            <div className="relative z-10 w-full md:w-auto flex flex-col sm:flex-row gap-4">
-                <label className="group relative flex items-center justify-center cursor-pointer bg-white/5 backdrop-blur-2xl text-white font-extrabold py-3 px-6 rounded-2xl shadow-[0_0_20px_rgba(6,182,212,0.2),inset_0_1px_1px_rgba(255,255,255,0.2)] transition-all hover:shadow-[0_0_40px_rgba(6,182,212,0.6),inset_0_1px_1px_rgba(255,255,255,0.4)] hover:-translate-y-1 active:translate-y-0 border border-cyan-400/30 hover:border-cyan-400/80 overflow-hidden text-sm">
-                  <span className="absolute inset-0 bg-cyan-400/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></span>
-                  <span className="mr-2 relative z-10">
-                    <svg className="w-5 h-5 text-cyan-300 drop-shadow-[0_0_8px_rgba(103,232,249,0.8)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                    </svg>
-                  </span>
-                  <span className="relative z-10 tracking-wide">Tareas y Viajes</span>
-                  <input 
-                    type="file" 
-                    accept=".xlsx, .xls" 
-                    onChange={handleFileUpload}
-                    className="hidden" 
-                  />
-                </label>
-                
+            <div className="relative z-10 w-full md:w-auto flex flex-col gap-3">
+                {/* GROUP: Datos Operativos */}
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => setIsOpsExpanded(prev => !prev)}
+                    className={`group relative flex items-center justify-between cursor-pointer bg-white/5 backdrop-blur-2xl text-white font-extrabold py-3 px-5 rounded-2xl shadow-[0_0_20px_rgba(6,182,212,0.2),inset_0_1px_1px_rgba(255,255,255,0.2)] transition-all hover:shadow-[0_0_30px_rgba(6,182,212,0.4)] hover:-translate-y-0.5 border border-cyan-400/30 hover:border-cyan-400/60 overflow-hidden text-sm w-full`}
+                  >
+                    <span className="absolute inset-0 bg-cyan-400/5 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></span>
+                    <div className="flex items-center gap-2 relative z-10">
+                      <svg className="w-5 h-5 text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                      </svg>
+                      <span className="tracking-wide">Datos Operativos</span>
+                    </div>
+                    <div className="flex items-center gap-2 relative z-10">
+                      {/* Status indicators */}
+                      <span title="Tareas y Viajes" className={`w-2 h-2 rounded-full ${allTrips.length > 0 ? 'bg-cyan-400 shadow-[0_0_6px_rgba(6,182,212,0.8)]' : 'bg-slate-600'}`}></span>
+                      <span title="Planillas Intermunicipales" className={`w-2 h-2 rounded-full ${planillasMap ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]' : 'bg-slate-600'}`}></span>
+                      <svg className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isOpsExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7"></path>
+                      </svg>
+                    </div>
+                  </button>
+
+                  {/* Expanded sub-buttons */}
+                  {isOpsExpanded && (
+                    <div className="flex flex-col sm:flex-row gap-2 pl-2 border-l-2 border-cyan-400/30">
+                      {/* Tareas y Viajes */}
+                      <label className="group relative flex items-center justify-center cursor-pointer bg-white/5 backdrop-blur-2xl text-white font-extrabold py-2.5 px-5 rounded-xl shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] transition-all hover:bg-cyan-400/10 hover:-translate-y-0.5 border border-cyan-400/20 hover:border-cyan-400/60 overflow-hidden text-xs flex-1">
+                        <span className="mr-2 relative z-10">
+                          <svg className={`w-4 h-4 ${allTrips.length > 0 ? 'text-cyan-400' : 'text-slate-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                          </svg>
+                        </span>
+                        <span className="relative z-10 tracking-wide">
+                          {allTrips.length > 0 ? `Tareas ✓ (${allTrips.length})` : 'Tareas y Viajes'}
+                        </span>
+                        <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} className="hidden" />
+                      </label>
+
+                      {/* Planillas Intermunicipales */}
+                      <label className="group relative flex items-center justify-center cursor-pointer bg-white/5 backdrop-blur-2xl text-white font-extrabold py-2.5 px-5 rounded-xl shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] transition-all hover:bg-emerald-400/10 hover:-translate-y-0.5 border border-emerald-400/20 hover:border-emerald-400/60 overflow-hidden text-xs flex-1">
+                        <span className="mr-2 relative z-10">
+                          <svg className={`w-4 h-4 ${planillasMap ? 'text-emerald-400' : 'text-slate-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
+                          </svg>
+                        </span>
+                        <span className="relative z-10 tracking-wide">
+                          {planillasMap ? `Planillas ✓ (${planillasMap.size})` : 'Planillas Intermunicipales'}
+                        </span>
+                        <input type="file" accept=".xlsx, .xls" onChange={handlePlanillasUpload} className="hidden" />
+                      </label>
+                    </div>
+                  )}
+                </div>
+
+                {/* Velocidad Excesiva — standalone */}
                 <label className="group relative flex items-center justify-center cursor-pointer bg-white/5 backdrop-blur-2xl text-white font-extrabold py-3 px-6 rounded-2xl shadow-[0_0_20px_rgba(244,63,94,0.2),inset_0_1px_1px_rgba(255,255,255,0.2)] transition-all hover:shadow-[0_0_40px_rgba(244,63,94,0.6),inset_0_1px_1px_rgba(255,255,255,0.4)] hover:-translate-y-1 active:translate-y-0 border border-rose-400/30 hover:border-rose-400/80 overflow-hidden text-sm">
                   <span className="absolute inset-0 bg-rose-400/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></span>
                   <span className="mr-2 relative z-10">
                     <svg className="w-5 h-5 text-rose-300 drop-shadow-[0_0_8px_rgba(253,164,175,0.8)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
                     </svg>
                   </span>
                   <span className="relative z-10 tracking-wide">Velocidad Excesiva</span>
-                  <input 
-                    type="file" 
-                    accept=".xlsx, .xls" 
-                    onChange={handleTelemetryUpload}
-                    className="hidden" 
-                  />
+                  <input type="file" accept=".xlsx, .xls" onChange={handleTelemetryUpload} className="hidden" />
                 </label>
             </div>
 
@@ -508,19 +612,19 @@ function App() {
                 exit={{ opacity: 0, y: -15, scale: 0.98 }}
                 transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
               >
-                {activeTab === 'general' && filteredTrips.length > 0 && (
-                  <GeneralDashboard allTrips={filteredTrips} onDrillDown={handleDrillDown} telemetryData={filteredTelemetry} />
+                {activeTab === 'general' && validatedTrips.length > 0 && (
+                  <GeneralDashboard allTrips={validatedTrips} onDrillDown={handleDrillDown} telemetryData={filteredTelemetry} />
                 )}
-                {activeTab === 'individual' && filteredTrips.length > 0 && (
+                {activeTab === 'individual' && validatedTrips.length > 0 && (
                   <IndividualDashboard 
-                    allTrips={filteredTrips} 
+                    allTrips={validatedTrips} 
                     filters={globalFilters} 
                     setFilters={setGlobalFilters} 
                     telemetryData={filteredTelemetry}
                   />
                 )}
                 {activeTab === 'telemetry' && filteredTelemetry.length > 0 && (
-                  <TelemetryDashboard telemetryData={filteredTelemetry} allTrips={filteredTrips} />
+                  <TelemetryDashboard telemetryData={filteredTelemetry} allTrips={validatedTrips} />
                 )}
               </motion.div>
             </AnimatePresence>

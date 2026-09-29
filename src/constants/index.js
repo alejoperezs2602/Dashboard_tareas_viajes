@@ -20,8 +20,8 @@ export const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 export const TOP_N_DEFAULT = 10;
 
 // Map tile URL
-export const MAP_TILE_URL = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-export const MAP_ATTRIBUTION = '&copy; OpenStreetMap contributors';
+export const MAP_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+export const MAP_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 // Speeding marker style
 export const SPEEDING_MARKER_STYLE = {

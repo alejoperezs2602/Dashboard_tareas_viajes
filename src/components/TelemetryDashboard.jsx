@@ -51,6 +51,11 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
     return telemetryData.find(v => v.interno === selectedInterno) || null;
   }, [telemetryData, selectedInterno]);
 
+  // Clear cached addresses when vehicle changes
+  useEffect(() => {
+    setResolvedAddresses({});
+  }, [selectedInterno]);
+
   const reportData = useMemo(() => {
     if (!selectedVehicleData || selectedVehicleData.excesos === 0) return [];
     
@@ -154,7 +159,7 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
       const htmlToImage = await import('html-to-image');
 
       const dataUrl = await htmlToImage.toPng(reportRef.current, {
-        pixelRatio: 2, // Alta resolución
+        pixelRatio: 4, // Resolución ultra alta para evitar borrosidad en WhatsApp
         backgroundColor: '#ffffff', 
         style: {
           visibility: 'visible', // Forzamos a que sea visible en el render
@@ -307,12 +312,7 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
                 url={MAP_TILE_URL}
               />
               
-              {/* Ruta principal */}
-              <Polyline 
-                positions={selectedVehicleData.puntos.map(p => [p.lat, p.lng])} 
-                {...ROUTE_POLYLINE_STYLE}
-              />
-
+              
               {/* Puntos de exceso de velocidad */}
               {selectedVehicleData.puntos.filter(p => p.esExceso).map((p, idx) => {
                 const isSelected = selectedAlert && selectedAlert[0] === p.lat && selectedAlert[1] === p.lng;
