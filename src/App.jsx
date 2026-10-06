@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { auth } from './services/firebase.js';
+import { upsertTrips, upsertPlanillas, upsertTelemetry, fetchHistoricalTrips, fetchHistoricalTelemetry, fetchAvailableDates } from './services/fleetService.js';
+import LoginScreen from './components/ui/LoginScreen.jsx';
 import { parseAllTrips } from './utils/excelParser';
 import { parseTelemetry } from './utils/telemetryParser';
 import { parsePlanillas } from './utils/planillasParser';
@@ -12,22 +16,46 @@ import TelemetryDashboard from './components/TelemetryDashboard';
 import { motion, AnimatePresence } from 'framer-motion';
 import Tilt from 'react-parallax-tilt';
 import LoadingSpinner from './components/ui/LoadingSpinner.jsx';
+import SyncToast from './components/ui/SyncToast.jsx';
 import ErrorBanner from './components/ui/ErrorBanner.jsx';
 import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB } from './constants/index.js';
 import CommandPalette from './components/CommandPalette';
+import AdminDeleteModal from './components/ui/AdminDeleteModal.jsx';
+import AvailableDatePicker from './components/ui/AvailableDatePicker.jsx';
 
 function App() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
   const [allTrips, setAllTrips] = useState([]);
   const [planillasMap, setPlanillasMap] = useState(null); // null = not uploaded yet
+  
+  const loadedPlanillasCount = useMemo(() => {
+    if (planillasMap) return planillasMap.size;
+    return allTrips.filter(t => t.planilla && t.planilla.conductor).length;
+  }, [allTrips, planillasMap]);
+
   const [telemetryData, setTelemetryData] = useState([]);
   const [activeTab, setActiveTab] = useState('general');
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('Procesando archivo...');
+  const [loadingSubMessage, setLoadingSubMessage] = useState('Esto puede tomar unos segundos');
+  const [syncStatus, setSyncStatus] = useState({ isSyncing: false, message: '', subMessage: '' });
   const [isOpsExpanded, setIsOpsExpanded] = useState(false);
   const [isLightMode, setIsLightMode] = useState(() => {
     return localStorage.getItem('theme') === 'light';
   });
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      setAuthChecked(true);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     if (isLightMode) {
@@ -40,7 +68,17 @@ function App() {
   }, [isLightMode]);
 
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [availableDates, setAvailableDates] = useState([]);
   
+  // Fetch available dates when auth is ready
+  useEffect(() => {
+    if (authChecked && currentUser) {
+      fetchAvailableDates()
+        .then(dates => setAvailableDates(dates))
+        .catch(err => console.error("Error fetching dates:", err));
+    }
+  }, [authChecked, currentUser]);
+
   // Lifted state for cross-tab navigation (drill-down)
   const [globalFilters, setGlobalFilters] = useState({
     ruta: 'ALL',
@@ -54,11 +92,16 @@ function App() {
     async function restore() {
       const savedTrips = await loadData('allTrips');
       const savedTelemetry = await loadData('telemetryData');
+      const savedPlanillas = await loadData('planillasMap');
+      
       if (savedTrips && savedTrips.length > 0) {
         setAllTrips(savedTrips);
       }
       if (savedTelemetry && savedTelemetry.length > 0) {
         setTelemetryData(savedTelemetry);
+      }
+      if (savedPlanillas) {
+        setPlanillasMap(new Map(savedPlanillas));
       }
     }
     restore();
@@ -88,30 +131,83 @@ function App() {
     });
   }, [allTrips, dateRange]);
 
-  /**
-   * validatedTrips: applies the Planillas Intermunicipales filter.
-   * - If planillasMap is null (file not uploaded), all trips pass through unchanged.
-   * - If planillasMap is loaded:
-   *     • Only trips whose `viaje` code exists in the map are kept.
-   *     • The conductor for each kept trip is overridden with the one from planillas.
-   */
   const validatedTrips = useMemo(() => {
-    if (!planillasMap) return filteredTrips; // No filter applied
+    // 1. Agrupar viajes por fecha para saber si un día tiene planillas subidas
+    const diasConPlanilla = new Set();
     
-    return filteredTrips
-      .filter(t => planillasMap.has(String(t.viaje).trim()))
-      .map(t => {
-        const conductorFromPlanilla = planillasMap.get(String(t.viaje).trim());
-        // Override conductor in trip-level metadata and in every checkpoint
+    const tienePlanilla = (t) => {
+      const id = String(t.viaje).trim();
+      return (t.planilla && t.planilla.conductor) || (planillasMap && planillasMap.has(id));
+    };
+
+    const getConductor = (t) => {
+      const id = String(t.viaje).trim();
+      if (planillasMap && planillasMap.has(id)) return planillasMap.get(id);
+      if (t.planilla && t.planilla.conductor) return t.planilla.conductor;
+      return null;
+    };
+
+    filteredTrips.forEach(t => {
+      if (tienePlanilla(t)) {
+        const d = parseCustomDate(t.fecha);
+        if (d) {
+          const iso = d.toISOString().split('T')[0];
+          diasConPlanilla.add(iso);
+        }
+      }
+    });
+
+    // 2. Filtrar y mapear según la regla de negocio
+    return filteredTrips.filter(t => {
+      const d = parseCustomDate(t.fecha);
+      if (!d) return true;
+      const iso = d.toISOString().split('T')[0];
+      
+      const diaTienePlanilla = diasConPlanilla.has(iso);
+      
+      // Si el día TIENE planillas, descartamos los viajes de ese día que NO tienen planilla
+      if (diaTienePlanilla && !tienePlanilla(t)) {
+        return false;
+      }
+      return true; // Si el día no tiene planillas, pasan todos
+    }).map(t => {
+      const conductorFromPlanilla = getConductor(t);
+      if (conductorFromPlanilla) {
         return {
           ...t,
-          conductoresArray: conductorFromPlanilla ? [conductorFromPlanilla] : t.conductoresArray,
+          conductoresArray: [conductorFromPlanilla],
           puntos: t.puntos.map(p => ({
             ...p,
-            conductor: conductorFromPlanilla || p.conductor
+            conductor: conductorFromPlanilla
           }))
         };
-      });
+      }
+      return t;
+    });
+  }, [filteredTrips, planillasMap]);
+
+  // Phase 3: Calculate which dates are completely missing Planillas
+  const diasSinPlanillas = useMemo(() => {
+    if (filteredTrips.length === 0) return [];
+    
+    const tienePlanilla = (t) => {
+      const id = String(t.viaje).trim();
+      return (t.planilla && t.planilla.conductor) || (planillasMap && planillasMap.has(id));
+    };
+    
+    const diasTotales = new Set();
+    const diasCon = new Set();
+    
+    filteredTrips.forEach(t => {
+      const d = parseCustomDate(t.fecha);
+      if (d) {
+        const iso = d.toISOString().split('T')[0];
+        diasTotales.add(iso);
+        if (tienePlanilla(t)) diasCon.add(iso);
+      }
+    });
+    
+    return [...diasTotales].filter(iso => !diasCon.has(iso)).sort();
   }, [filteredTrips, planillasMap]);
 
   const filteredTelemetry = useMemo(() => {
@@ -166,29 +262,48 @@ function App() {
     const reader = new FileReader();
     reader.onload = function(e) {
       setIsLoading(true);
-      try {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        
-        // raw: true extracts actual values (like Excel serial dates) instead of formatted display text
-        const matrix = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
-        
-        const trips = parseAllTrips(matrix);
-        if (trips.length === 0) {
-          setError("No se pudieron detectar viajes. Asegúrese de que las tablas terminen con 'TOTAL'.");
-        } else {
-          setAllTrips(trips);
-          saveData('allTrips', trips);
-          if (activeTab === 'telemetry') setActiveTab('general');
+      setLoadingMessage('Procesando archivo local...');
+      setLoadingSubMessage('Parseando Excel...');
+      
+      // Allow UI to paint before heavy parsing
+      setTimeout(() => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          
+          const matrix = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
+          const trips = parseAllTrips(matrix);
+          
+          if (trips.length === 0) {
+            setError("No se pudieron detectar viajes. Asegúrese de que las tablas terminen con 'TOTAL'.");
+            setIsLoading(false);
+          } else {
+            setAllTrips(trips);
+            saveData('allTrips', trips);
+            if (activeTab === 'telemetry') setActiveTab('general');
+            
+            // Liberar pantalla inmediatamente!
+            setIsLoading(false);
+
+            // Subir a Firebase en verdadero SEGUNDO PLANO
+            setSyncStatus({ isSyncing: true, message: 'Guardando en la nube...', subMessage: 'Iniciando sincronización' });
+            upsertTrips(trips, (processed, total) => {
+              setSyncStatus({ isSyncing: true, message: 'Guardando en la nube...', subMessage: `${processed} de ${total} viajes guardados.` });
+            }).then(() => {
+              setSyncStatus({ isSyncing: false, message: '', subMessage: '' });
+            }).catch(err => {
+              console.error("Error sync trips:", err);
+              setSyncStatus({ isSyncing: false, message: '', subMessage: '' });
+            });
+          }
+        } catch (err) {
+          console.error(err);
+          setError("Ocurrió un error al procesar el archivo Excel de Tiempos.");
+          setIsLoading(false);
         }
-        setIsLoading(false);
-      } catch (err) {
-        console.error(err);
-        setError("Ocurrió un error al procesar el archivo Excel de Tiempos.");
-        setIsLoading(false);
-      }
+      }, 50);
     };
     reader.readAsArrayBuffer(file);
     e.target.value = null; // reset
@@ -207,29 +322,45 @@ function App() {
     const reader = new FileReader();
     reader.onload = function(e) {
       setIsLoading(true);
-      try {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        
-        // raw: true ensures we get the underlying Excel serial date, not just "September"
-        const flatData = XLSX.utils.sheet_to_json(worksheet, { raw: true });
-        
-        const parsed = parseTelemetry(flatData);
-        if (parsed.length === 0) {
-          setError("No se encontraron coordenadas GPS válidas. Revise las columnas (Latitud, Longitud, Velocidad).");
-        } else {
-          setTelemetryData(parsed);
-          saveData('telemetryData', parsed);
-          setActiveTab('telemetry');
+      setLoadingMessage('Procesando archivo local...');
+      setLoadingSubMessage('Parseando telemetría...');
+      
+      setTimeout(() => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          
+          const flatData = XLSX.utils.sheet_to_json(worksheet, { raw: true });
+          const parsed = parseTelemetry(flatData);
+          
+          if (parsed.length === 0) {
+            setError("No se encontraron coordenadas GPS válidas. Revise las columnas (Latitud, Longitud, Velocidad).");
+            setIsLoading(false);
+          } else {
+            setTelemetryData(parsed);
+            saveData('telemetryData', parsed);
+            setActiveTab('telemetry');
+            
+            setIsLoading(false);
+
+            setSyncStatus({ isSyncing: true, message: 'Subiendo telemetría...', subMessage: 'Iniciando sincronización' });
+            upsertTelemetry(parsed, (processed, total) => {
+              setSyncStatus({ isSyncing: true, message: 'Subiendo telemetría...', subMessage: `${processed} de ${total} vehículos combinados.` });
+            }).then(() => {
+              setSyncStatus({ isSyncing: false, message: '', subMessage: '' });
+            }).catch(err => {
+              console.error("Error sync telemetry:", err);
+              setSyncStatus({ isSyncing: false, message: '', subMessage: '' });
+            });
+          }
+        } catch (err) {
+          console.error(err);
+          setError("Ocurrió un error al procesar el archivo Excel de Telemetría.");
+          setIsLoading(false);
         }
-        setIsLoading(false);
-      } catch (err) {
-        console.error(err);
-        setError("Ocurrió un error al procesar el archivo Excel de Telemetría.");
-        setIsLoading(false);
-      }
+      }, 50);
     };
     reader.readAsArrayBuffer(file);
     e.target.value = null; // reset
@@ -248,26 +379,43 @@ function App() {
     const reader = new FileReader();
     reader.onload = function(ev) {
       setIsLoading(true);
-      try {
-        const data = new Uint8Array(ev.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const flatData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
+      setLoadingMessage('Procesando archivo local...');
+      setLoadingSubMessage('Parseando Planillas...');
+      
+      setTimeout(() => {
+        try {
+          const data = new Uint8Array(ev.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const flatData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
 
-        const parsed = parsePlanillas(flatData);
-        if (parsed.size === 0) {
-          setError('No se encontraron registros en Planillas Intermunicipales. Verifique que el archivo tenga la columna "Viaje".');
-        } else {
-          setPlanillasMap(parsed);
-          saveData('planillasMap', Array.from(parsed.entries()));
+          const parsed = parsePlanillas(flatData);
+          if (parsed.size === 0) {
+            setError('No se encontraron registros en Planillas Intermunicipales. Verifique que el archivo tenga la columna "Viaje".');
+            setIsLoading(false);
+          } else {
+            setPlanillasMap(parsed);
+            saveData('planillasMap', Array.from(parsed.entries()));
+            
+            setIsLoading(false);
+
+            setSyncStatus({ isSyncing: true, message: 'Subiendo planillas...', subMessage: 'Iniciando sincronización' });
+            upsertPlanillas(parsed, (processed, total) => {
+              setSyncStatus({ isSyncing: true, message: 'Subiendo planillas...', subMessage: `${processed} de ${total} sincronizadas.` });
+            }).then(() => {
+              setSyncStatus({ isSyncing: false, message: '', subMessage: '' });
+            }).catch(err => {
+              console.error("Error sync planillas:", err);
+              setSyncStatus({ isSyncing: false, message: '', subMessage: '' });
+            });
+          }
+        } catch (err) {
+          console.error(err);
+          setError('Ocurrió un error al procesar el archivo de Planillas Intermunicipales.');
+          setIsLoading(false);
         }
-        setIsLoading(false);
-      } catch (err) {
-        console.error(err);
-        setError('Ocurrió un error al procesar el archivo de Planillas Intermunicipales.');
-        setIsLoading(false);
-      }
+      }, 50);
     };
     reader.readAsArrayBuffer(file);
     e.target.value = null;
@@ -291,6 +439,47 @@ function App() {
     generateReport(allTrips, telemetryData);
   };
 
+  const handleFetchCloud = async () => {
+    if (!dateRange.start && !dateRange.end) {
+      setError('Por favor, selecciona una fecha inicial o final para consultar.');
+      return;
+    }
+    
+    setIsLoading(true);
+    setLoadingMessage('Consultando Base de Datos...');
+    setLoadingSubMessage('Descargando historial de la nube...');
+    setError('');
+    
+    try {
+      const startISO = dateRange.start || '2000-01-01';
+      const endISO = dateRange.end || '2100-01-01';
+      
+      const fetchedTrips = await fetchHistoricalTrips(startISO, endISO);
+      const fetchedTelemetry = await fetchHistoricalTelemetry(startISO, endISO);
+      
+      if (fetchedTrips.length === 0 && fetchedTelemetry.length === 0) {
+        setError('No se encontraron registros para este rango de fechas en la nube.');
+      } else {
+        // Reemplazar estado local con lo consultado
+        setAllTrips(fetchedTrips);
+        setTelemetryData(fetchedTelemetry);
+        saveData('allTrips', fetchedTrips);
+        saveData('telemetryData', fetchedTelemetry);
+        
+        // No necesitamos descargar planillas porque al guardar en Firebase,
+        // ya habíamos adjuntado el conductor a cada viaje (doc.conductoresArray).
+        
+        setSyncStatus({ isSyncing: true, message: 'Descarga exitosa', subMessage: 'Mostrando historial' });
+        setTimeout(() => setSyncStatus({ isSyncing: false }), 3000);
+      }
+    } catch (err) {
+      console.error(err);
+      setError('Ocurrió un error al conectar con Firebase.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
     const handleKeyDown = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
@@ -311,11 +500,25 @@ function App() {
     clearData: () => handleClearData()
   };
 
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0b0a15]">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return <LoginScreen />;
+  }
+
   return (
-    <div className="relative min-h-screen overflow-hidden">
-      {isLoading && <LoadingSpinner />}
-      {/* Liquid background blobs (Vivid Neon Tones) */}
-      <div className="fixed inset-0 w-full h-full pointer-events-none z-0 flex items-center justify-center">
+    <>
+      <SyncToast {...syncStatus} />
+      <div className="relative min-h-screen overflow-hidden">
+        {isLoading && <LoadingSpinner message={loadingMessage} subMessage={loadingSubMessage} />}
+        {/* Liquid background blobs (Vivid Neon Tones) */}
+        <div className="fixed inset-0 w-full h-full pointer-events-none z-0 flex items-center justify-center">
         <div className="absolute top-10 -left-10 w-[500px] h-[500px] bg-cyan-500/40 rounded-full mix-blend-screen filter blur-[150px] opacity-80 animate-blob"></div>
         <div className="absolute top-0 -right-10 w-[500px] h-[500px] bg-fuchsia-600/40 rounded-full mix-blend-screen filter blur-[150px] opacity-80 animate-blob animation-delay-2000"></div>
         <div className="absolute -bottom-20 left-1/4 w-[600px] h-[600px] bg-indigo-600/40 rounded-full mix-blend-screen filter blur-[150px] opacity-80 animate-blob animation-delay-4000"></div>
@@ -326,22 +529,36 @@ function App() {
         <Tilt tiltMaxAngleX={3} tiltMaxAngleY={3} scale={1.01} transitionSpeed={2000} gyroscope={true}>
           <div className="glass-panel p-10 rounded-[2.5rem] flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden">
             
-            <div className="flex items-center gap-4 relative z-10">
-                <div>
-                  <h1 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight drop-shadow-lg bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">Dashboard de Viajes</h1>
-                  <p className="text-slate-300 mt-2 font-medium text-lg">Inteligencia y estadísticas en tiempo real</p>
+            <div className="flex flex-col gap-4 relative z-10">
+              <div className="flex items-center gap-4">
+                  <div>
+                    <h1 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight drop-shadow-lg bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">Dashboard de Viajes</h1>
+                    <p className="text-slate-300 mt-2 font-medium text-lg">Inteligencia y estadísticas en tiempo real</p>
+                  </div>
+                  <button 
+                    onClick={() => setIsLightMode(!isLightMode)}
+                    className="ml-4 p-3 rounded-2xl glass-panel text-cyan-400 hover:text-cyan-300 transition-all hover:scale-110 active:scale-95"
+                    aria-label="Toggle Theme"
+                  >
+                    {isLightMode ? (
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+                    ) : (
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                    )}
+                  </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="px-3 py-1 bg-emerald-500/20 border border-emerald-500/30 rounded-full flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span className="text-xs font-bold text-emerald-300">{currentUser.email}</span>
                 </div>
-                <button 
-                  onClick={() => setIsLightMode(!isLightMode)}
-                  className="ml-4 p-3 rounded-2xl glass-panel text-cyan-400 hover:text-cyan-300 transition-all hover:scale-110 active:scale-95"
-                  aria-label="Toggle Theme"
+                <button
+                  onClick={() => signOut(auth)}
+                  className="text-xs font-bold text-slate-400 hover:text-white transition-colors underline"
                 >
-                  {isLightMode ? (
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
-                  ) : (
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-                  )}
+                  Cerrar sesión
                 </button>
+              </div>
             </div>
             
             <div className="relative z-10 w-full md:w-auto flex flex-col gap-3">
@@ -361,7 +578,7 @@ function App() {
                     <div className="flex items-center gap-2 relative z-10">
                       {/* Status indicators */}
                       <span title="Tareas y Viajes" className={`w-2 h-2 rounded-full ${allTrips.length > 0 ? 'bg-cyan-400 shadow-[0_0_6px_rgba(6,182,212,0.8)]' : 'bg-slate-600'}`}></span>
-                      <span title="Planillas Intermunicipales" className={`w-2 h-2 rounded-full ${planillasMap ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]' : 'bg-slate-600'}`}></span>
+                      <span title="Planillas Intermunicipales" className={`w-2 h-2 rounded-full ${loadedPlanillasCount > 0 ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]' : 'bg-slate-600'}`}></span>
                       <svg className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isOpsExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7"></path>
                       </svg>
@@ -387,12 +604,12 @@ function App() {
                       {/* Planillas Intermunicipales */}
                       <label className="group relative flex items-center justify-center cursor-pointer bg-white/5 backdrop-blur-2xl text-white font-extrabold py-2.5 px-5 rounded-xl shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] transition-all hover:bg-emerald-400/10 hover:-translate-y-0.5 border border-emerald-400/20 hover:border-emerald-400/60 overflow-hidden text-xs flex-1">
                         <span className="mr-2 relative z-10">
-                          <svg className={`w-4 h-4 ${planillasMap ? 'text-emerald-400' : 'text-slate-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className={`w-4 h-4 ${loadedPlanillasCount > 0 ? 'text-emerald-400' : 'text-slate-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
                           </svg>
                         </span>
                         <span className="relative z-10 tracking-wide">
-                          {planillasMap ? `Planillas ✓ (${planillasMap.size})` : 'Planillas Intermunicipales'}
+                          {loadedPlanillasCount > 0 ? `Planillas ✓ (${loadedPlanillasCount})` : 'Planillas Intermunicipales'}
                         </span>
                         <input type="file" accept=".xlsx, .xls" onChange={handlePlanillasUpload} className="hidden" />
                       </label>
@@ -443,6 +660,20 @@ function App() {
                     </button>
                   </>
                 )}
+                {currentUser?.email?.toLowerCase() === 'sistemas@sotrauraba.com.co' && (
+                  <button 
+                    onClick={() => setIsAdminModalOpen(true)}
+                    className="group relative flex items-center justify-center bg-rose-900/40 backdrop-blur-2xl text-rose-200 font-extrabold py-3 px-6 rounded-2xl shadow-[0_0_20px_rgba(225,29,72,0.2),inset_0_1px_1px_rgba(255,255,255,0.1)] transition-all hover:shadow-[0_0_40px_rgba(225,29,72,0.6),inset_0_1px_1px_rgba(255,255,255,0.3)] hover:-translate-y-1 active:translate-y-0 border border-rose-500/50 hover:border-rose-400 overflow-hidden text-sm ml-auto"
+                  >
+                    <span className="absolute inset-0 bg-rose-500/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></span>
+                    <span className="mr-2 relative z-10">
+                      <svg className="w-5 h-5 text-rose-300 drop-shadow-md" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                      </svg>
+                    </span>
+                    <span className="relative z-10 tracking-wide">Borrar Nube</span>
+                  </button>
+                )}
             </div>
           </div>
         </Tilt>
@@ -450,6 +681,142 @@ function App() {
         <AnimatePresence>
           {error && (
             <ErrorBanner message={error} onDismiss={() => setError(null)} />
+          )}
+        </AnimatePresence>
+
+        {/* ALWAYS VISIBLE FILTERS AND TABS */}
+        <div className="flex flex-col md:flex-row items-center justify-center gap-4 relative z-10 my-4">
+          <div className="flex items-center gap-2 bg-slate-800/50 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 mb-4 md:mb-0 w-full md:w-auto">
+            <span className="text-xs font-bold text-slate-400 uppercase">Filtro:</span>
+            <AvailableDatePicker 
+              value={dateRange.start} 
+              onChange={val => setDateRange(prev => ({ ...prev, start: val }))}
+              availableDates={availableDates}
+              placeholder="Desde"
+            />
+            <span className="text-slate-500">-</span>
+            <AvailableDatePicker 
+              value={dateRange.end} 
+              onChange={val => setDateRange(prev => ({ ...prev, end: val }))}
+              availableDates={availableDates}
+              placeholder="Hasta"
+            />
+            <button 
+              onClick={() => {
+                if (allTrips.length === 0) return;
+                let maxStr = allTrips[0].fecha;
+                let maxTime = 0;
+                
+                const firstDate = parseCustomDate(maxStr);
+                if (firstDate) maxTime = firstDate.getTime();
+                
+                allTrips.forEach(t => {
+                  const d = parseCustomDate(t.fecha);
+                  if (d) {
+                    const tTime = d.getTime();
+                    if (tTime > maxTime) {
+                      maxTime = tTime;
+                      maxStr = t.fecha;
+                    }
+                  }
+                });
+                
+                if (maxStr) {
+                  try {
+                    const d = parseCustomDate(maxStr);
+                    if (d) {
+                      const y = d.getFullYear();
+                      const m = String(d.getMonth() + 1).padStart(2, '0');
+                      const day = String(d.getDate()).padStart(2, '0');
+                      const iso = `${y}-${m}-${day}`;
+                      setDateRange({ start: iso, end: iso });
+                    }
+                  } catch(e) {
+                    console.error("Error setting date range", e);
+                  }
+                }
+              }}
+              className="ml-2 px-3 py-1 text-xs font-bold bg-cyan-500/20 text-cyan-400 rounded-lg hover:bg-cyan-500/30 transition-colors"
+              title="Filtrar al último día con datos"
+            >
+              Último Día
+            </button>
+            
+            <button 
+              onClick={handleFetchCloud}
+              className="ml-2 px-4 py-1.5 text-xs font-extrabold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded-lg hover:bg-emerald-500/30 hover:-translate-y-0.5 transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] flex items-center gap-1"
+              title="Descargar datos de la nube"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg>
+              Consultar Nube
+            </button>
+
+            {(dateRange.start || dateRange.end) && (
+              <button onClick={() => setDateRange({start: '', end: ''})} className="ml-2 text-rose-400 hover:text-rose-300">
+                ✕
+              </button>
+            )}
+          </div>
+          
+          <div className="inner-depth p-2 rounded-full flex flex-wrap justify-center gap-2 backdrop-blur-2xl relative">
+            {allTrips.length > 0 && (
+              <>
+                <button 
+                  onClick={() => setActiveTab('general')}
+                  className={`relative px-6 md:px-8 py-3 rounded-full text-xs md:text-sm font-extrabold transition-all duration-300 ease-out outline-none overflow-hidden z-10 tracking-wide ${
+                    activeTab === 'general' 
+                      ? 'text-cyan-300 shadow-[0_0_20px_rgba(6,182,212,0.4)] border border-cyan-400/50' 
+                      : 'text-slate-400 hover:text-cyan-200 border border-transparent'
+                  }`}
+                >
+                  {activeTab === 'general' && <motion.div layoutId="tabBackground" className="absolute inset-0 bg-cyan-400/10 backdrop-blur-md rounded-full -z-10"></motion.div>}
+                  Estadísticas Generales
+                </button>
+                <button 
+                  onClick={() => setActiveTab('individual')}
+                  className={`relative px-6 md:px-8 py-3 rounded-full text-xs md:text-sm font-extrabold transition-all duration-300 ease-out outline-none overflow-hidden z-10 tracking-wide ${
+                    activeTab === 'individual' 
+                      ? 'text-cyan-300 shadow-[0_0_20px_rgba(6,182,212,0.4)] border border-cyan-400/50' 
+                      : 'text-slate-400 hover:text-cyan-200 border border-transparent'
+                  }`}
+                >
+                  {activeTab === 'individual' && <motion.div layoutId="tabBackground" className="absolute inset-0 bg-cyan-400/10 backdrop-blur-md rounded-full -z-10"></motion.div>}
+                  Búsqueda Individualizada
+                </button>
+              </>
+            )}
+            {telemetryData.length > 0 && (
+              <button 
+                onClick={() => setActiveTab('telemetry')}
+                className={`relative px-6 md:px-8 py-3 rounded-full text-xs md:text-sm font-extrabold transition-all duration-300 ease-out outline-none overflow-hidden z-10 tracking-wide ${
+                  activeTab === 'telemetry' 
+                    ? 'text-rose-300 shadow-[0_0_20px_rgba(244,63,94,0.4)] border border-rose-400/50' 
+                    : 'text-slate-400 hover:text-rose-200 border border-transparent'
+                }`}
+              >
+                {activeTab === 'telemetry' && <motion.div layoutId="tabBackground" className="absolute inset-0 bg-rose-400/10 backdrop-blur-md rounded-full -z-10"></motion.div>}
+                Mapa GPS Automotor
+              </button>
+            )}
+          </div>
+        </div>
+        
+        <AnimatePresence>
+          {diasSinPlanillas.length > 0 && allTrips.length > 0 && (
+            <motion.div 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="relative z-10 w-full mb-4 flex justify-center"
+            >
+              <div className="bg-amber-500/10 border border-amber-500/30 text-amber-200 px-6 py-3 rounded-2xl flex items-center gap-3 shadow-[0_0_15px_rgba(245,158,11,0.05)] max-w-4xl backdrop-blur-md">
+                <svg className="w-6 h-6 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                <div className="text-sm">
+                  <span className="font-bold block mb-0.5">Planillas no cargadas</span>
+                  <span className="opacity-90">No se encontraron planillas intermunicipales para las fechas: <strong>{diasSinPlanillas.join(', ')}</strong>. Se muestran todos los viajes de esos días con los conductores por defecto.</span>
+                </div>
+              </div>
+            </motion.div>
           )}
         </AnimatePresence>
 
@@ -496,113 +863,6 @@ function App() {
             transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
             className="space-y-8"
           >
-            {/* Segmented Control Tabs (3D pill) */}
-            <div className="flex flex-col md:flex-row items-center justify-center gap-4">
-              <div className="flex items-center gap-2 bg-slate-800/50 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 mb-4 md:mb-0 w-full md:w-auto">
-                <span className="text-xs font-bold text-slate-400 uppercase">Filtro:</span>
-                <input 
-                  type="date" 
-                  value={dateRange.start} 
-                  onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                  className="bg-transparent text-sm font-bold text-slate-200 outline-none cursor-pointer"
-                />
-                <span className="text-slate-500">-</span>
-                <input 
-                  type="date" 
-                  value={dateRange.end} 
-                  onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                  className="bg-transparent text-sm font-bold text-slate-200 outline-none cursor-pointer"
-                />
-                <button 
-                  onClick={() => {
-                    // Find max date in allTrips
-                    if (allTrips.length === 0) return;
-                    let maxStr = allTrips[0].fecha;
-                    let maxTime = 0;
-                    
-                    const firstDate = parseCustomDate(maxStr);
-                    if (firstDate) maxTime = firstDate.getTime();
-                    
-                    allTrips.forEach(t => {
-                      const d = parseCustomDate(t.fecha);
-                      if (d) {
-                        const tTime = d.getTime();
-                        if (tTime > maxTime) {
-                          maxTime = tTime;
-                          maxStr = t.fecha;
-                        }
-                      }
-                    });
-                    
-                    // Format to YYYY-MM-DD using local time
-                    if (maxStr) {
-                      try {
-                        const d = parseCustomDate(maxStr);
-                        if (d) {
-                          const y = d.getFullYear();
-                          const m = String(d.getMonth() + 1).padStart(2, '0');
-                          const day = String(d.getDate()).padStart(2, '0');
-                          const iso = `${y}-${m}-${day}`;
-                          setDateRange({ start: iso, end: iso });
-                        }
-                      } catch(e) {
-                        console.error("Error setting date range", e);
-                      }
-                    }
-                  }}
-                  className="ml-2 px-3 py-1 text-xs font-bold bg-cyan-500/20 text-cyan-400 rounded-lg hover:bg-cyan-500/30 transition-colors"
-                  title="Filtrar al último día con datos"
-                >
-                  Último Día
-                </button>
-                {(dateRange.start || dateRange.end) && (
-                  <button onClick={() => setDateRange({start: '', end: ''})} className="ml-2 text-rose-400 hover:text-rose-300">
-                    ✕
-                  </button>
-                )}
-              </div>
-              <div className="inner-depth p-2 rounded-full flex flex-wrap justify-center gap-2 backdrop-blur-2xl relative">
-                {allTrips.length > 0 && (
-                  <>
-                    <button 
-                      onClick={() => setActiveTab('general')}
-                      className={`relative px-6 md:px-8 py-3 rounded-full text-xs md:text-sm font-extrabold transition-all duration-300 ease-out outline-none overflow-hidden z-10 tracking-wide ${
-                        activeTab === 'general' 
-                          ? 'text-cyan-300 shadow-[0_0_20px_rgba(6,182,212,0.4)] border border-cyan-400/50' 
-                          : 'text-slate-400 hover:text-cyan-200 border border-transparent'
-                      }`}
-                    >
-                      {activeTab === 'general' && <motion.div layoutId="tabBackground" className="absolute inset-0 bg-cyan-400/10 backdrop-blur-md rounded-full -z-10"></motion.div>}
-                      Estadísticas Generales
-                    </button>
-                    <button 
-                      onClick={() => setActiveTab('individual')}
-                      className={`relative px-6 md:px-8 py-3 rounded-full text-xs md:text-sm font-extrabold transition-all duration-300 ease-out outline-none overflow-hidden z-10 tracking-wide ${
-                        activeTab === 'individual' 
-                          ? 'text-cyan-300 shadow-[0_0_20px_rgba(6,182,212,0.4)] border border-cyan-400/50' 
-                          : 'text-slate-400 hover:text-cyan-200 border border-transparent'
-                      }`}
-                    >
-                      {activeTab === 'individual' && <motion.div layoutId="tabBackground" className="absolute inset-0 bg-cyan-400/10 backdrop-blur-md rounded-full -z-10"></motion.div>}
-                      Búsqueda Individualizada
-                    </button>
-                  </>
-                )}
-                {telemetryData.length > 0 && (
-                  <button 
-                    onClick={() => setActiveTab('telemetry')}
-                    className={`relative px-6 md:px-8 py-3 rounded-full text-xs md:text-sm font-extrabold transition-all duration-300 ease-out outline-none overflow-hidden z-10 tracking-wide ${
-                      activeTab === 'telemetry' 
-                        ? 'text-rose-300 shadow-[0_0_20px_rgba(244,63,94,0.4)] border border-rose-400/50' 
-                        : 'text-slate-400 hover:text-rose-200 border border-transparent'
-                    }`}
-                  >
-                    {activeTab === 'telemetry' && <motion.div layoutId="tabBackground" className="absolute inset-0 bg-rose-400/10 backdrop-blur-md rounded-full -z-10"></motion.div>}
-                    Mapa GPS Automotor
-                  </button>
-                )}
-              </div>
-            </div>
 
             <AnimatePresence mode="wait">
               <motion.div
@@ -637,7 +897,13 @@ function App() {
         onClose={() => setIsPaletteOpen(false)} 
         actions={paletteActions} 
       />
+      <AdminDeleteModal
+        isOpen={isAdminModalOpen}
+        onClose={() => setIsAdminModalOpen(false)}
+        availableDates={availableDates}
+      />
     </div>
+    </>
   );
 }
 

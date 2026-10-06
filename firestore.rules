@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Check if user is authenticated
+    function signedIn() {
+      return request.auth != null;
+    }
+    
+    // Check if user is the administrator
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email.toLowerCase() == 'sistemas@sotrauraba.com.co';
+    }
+
+    match /viajes/{viajeId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn();
+      allow delete: if isAdmin();
+    }
+    
+    match /telemetria/{telemetriaId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn();
+      allow delete: if isAdmin();
+    }
+    
+    match /resumen_diario/{fecha} {
+      allow read: if signedIn();
+      allow create, update: if signedIn();
+      allow delete: if isAdmin();
+    }
+    
+    match /cargas/{cargaId} {
+      allow read, create: if signedIn();
+      allow update, delete: if false; // Upload logs cannot be modified or deleted
+    }
+  }
+}
