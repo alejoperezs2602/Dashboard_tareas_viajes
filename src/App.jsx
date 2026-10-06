@@ -685,8 +685,8 @@ function App() {
         </AnimatePresence>
 
         {/* ALWAYS VISIBLE FILTERS AND TABS */}
-        <div className="flex flex-col md:flex-row items-center justify-center gap-4 relative z-10 my-4">
-          <div className="flex items-center gap-2 bg-slate-800/50 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 mb-4 md:mb-0 w-full md:w-auto">
+        <div className="flex flex-col md:flex-row items-center justify-center gap-4 relative z-50 my-4">
+          <div className="flex items-center gap-2 bg-slate-800/50 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 mb-4 md:mb-0 w-full md:w-auto relative">
             <span className="text-xs font-bold text-slate-400 uppercase">Filtro:</span>
             <AvailableDatePicker 
               value={dateRange.start} 

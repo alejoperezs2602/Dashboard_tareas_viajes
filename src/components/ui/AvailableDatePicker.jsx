@@ -53,12 +53,12 @@ export default function AvailableDatePicker({ value, onChange, availableDates = 
       <AnimatePresence>
         {isOpen && (
           <>
-            <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)}></div>
+            <div className="fixed inset-0 z-[90]" onClick={() => setIsOpen(false)}></div>
             <motion.div 
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="absolute top-full mt-2 left-0 z-50 bg-[#141525] border border-cyan-500/20 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] p-4 w-72 backdrop-blur-xl"
+              className="absolute top-full mt-2 left-0 z-[100] bg-[#141525] border border-cyan-500/20 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] p-4 w-72 backdrop-blur-xl"
             >
               <div className="flex justify-between items-center mb-4">
                 <button type="button" onClick={prevMonth} className="text-slate-400 hover:text-white p-1">
