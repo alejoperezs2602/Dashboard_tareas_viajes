@@ -1,9 +1,25 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function AvailableDatePicker({ value, onChange, availableDates = [], placeholder = 'Seleccionar fecha' }) {
   const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef(null);
   
+  // Handle click outside to close
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    }
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
   // Initialize to the year/month of the currently selected value, or today's date if empty.
   const initialDate = value ? new Date(value + 'T12:00:00Z') : new Date();
   const [currentMonth, setCurrentMonth] = useState(new Date(initialDate.getFullYear(), initialDate.getMonth(), 1));
@@ -40,7 +56,7 @@ export default function AvailableDatePicker({ value, onChange, availableDates = 
   };
 
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <button 
         type="button"
         onClick={() => setIsOpen(!isOpen)}
@@ -52,12 +68,10 @@ export default function AvailableDatePicker({ value, onChange, availableDates = 
 
       <AnimatePresence>
         {isOpen && (
-          <>
-            <div className="fixed inset-0 z-[90]" onClick={() => setIsOpen(false)}></div>
-            <motion.div 
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
               className="absolute top-full mt-2 left-0 z-[100] bg-[#141525] border border-cyan-500/20 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] p-4 w-72 backdrop-blur-xl"
             >
               <div className="flex justify-between items-center mb-4">
@@ -121,7 +135,6 @@ export default function AvailableDatePicker({ value, onChange, availableDates = 
                  </div>
               </div>
             </motion.div>
-          </>
         )}
       </AnimatePresence>
     </div>
