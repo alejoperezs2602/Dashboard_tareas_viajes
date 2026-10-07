@@ -685,22 +685,25 @@ function App() {
         </AnimatePresence>
 
         {/* ALWAYS VISIBLE FILTERS AND TABS */}
-        <div className="flex flex-col md:flex-row items-center justify-center gap-4 relative z-50 my-4">
-          <div className="flex items-center gap-2 bg-slate-800/50 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 mb-4 md:mb-0 w-full md:w-auto relative">
-            <span className="text-xs font-bold text-slate-400 uppercase">Filtro:</span>
-            <AvailableDatePicker 
-              value={dateRange.start} 
-              onChange={val => setDateRange(prev => ({ ...prev, start: val }))}
-              availableDates={availableDates}
-              placeholder="Desde"
-            />
-            <span className="text-slate-500">-</span>
-            <AvailableDatePicker 
-              value={dateRange.end} 
-              onChange={val => setDateRange(prev => ({ ...prev, end: val }))}
-              availableDates={availableDates}
-              placeholder="Hasta"
-            />
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-center gap-4 relative z-50 my-4">
+          <div className="flex flex-wrap items-center justify-center gap-2 bg-slate-800/50 backdrop-blur-md px-3 sm:px-4 py-3 sm:py-2 rounded-2xl border border-white/10 w-full lg:w-auto relative">
+            <span className="text-xs font-bold text-slate-400 uppercase w-full sm:w-auto text-center sm:text-left">Filtro:</span>
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-center">
+              <AvailableDatePicker 
+                value={dateRange.start} 
+                onChange={val => setDateRange(prev => ({ ...prev, start: val }))}
+                availableDates={availableDates}
+                placeholder="Desde"
+              />
+              <span className="text-slate-500">-</span>
+              <AvailableDatePicker 
+                value={dateRange.end} 
+                onChange={val => setDateRange(prev => ({ ...prev, end: val }))}
+                availableDates={availableDates}
+                placeholder="Hasta"
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-center mt-2 sm:mt-0">
             <button 
               onClick={() => {
                 if (allTrips.length === 0) return;
@@ -736,7 +739,7 @@ function App() {
                   }
                 }
               }}
-              className="ml-2 px-3 py-1 text-xs font-bold bg-cyan-500/20 text-cyan-400 rounded-lg hover:bg-cyan-500/30 transition-colors"
+              className="sm:ml-2 px-3 py-2 sm:py-1 text-xs font-bold bg-cyan-500/20 text-cyan-400 rounded-lg hover:bg-cyan-500/30 transition-colors whitespace-nowrap"
               title="Filtrar al último día con datos"
             >
               Último Día
@@ -744,7 +747,7 @@ function App() {
             
             <button 
               onClick={handleFetchCloud}
-              className="ml-2 px-4 py-1.5 text-xs font-extrabold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded-lg hover:bg-emerald-500/30 hover:-translate-y-0.5 transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] flex items-center gap-1"
+              className="px-4 py-2 sm:py-1.5 text-xs font-extrabold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded-lg hover:bg-emerald-500/30 hover:-translate-y-0.5 transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] flex items-center gap-1 whitespace-nowrap"
               title="Descargar datos de la nube"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg>
@@ -752,13 +755,14 @@ function App() {
             </button>
 
             {(dateRange.start || dateRange.end) && (
-              <button onClick={() => setDateRange({start: '', end: ''})} className="ml-2 text-rose-400 hover:text-rose-300">
+              <button onClick={() => setDateRange({start: '', end: ''})} className="px-2 text-rose-400 hover:text-rose-300" aria-label="Limpiar filtro">
                 ✕
               </button>
             )}
+            </div>
           </div>
           
-          <div className="inner-depth p-2 rounded-full flex flex-wrap justify-center gap-2 backdrop-blur-2xl relative">
+          <div className="inner-depth p-2 rounded-3xl sm:rounded-full flex flex-wrap justify-center gap-2 backdrop-blur-2xl relative">
             {allTrips.length > 0 && (
               <>
                 <button 

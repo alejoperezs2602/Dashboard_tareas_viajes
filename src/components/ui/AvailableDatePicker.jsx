@@ -60,7 +60,7 @@ export default function AvailableDatePicker({ value, onChange, availableDates = 
       <button 
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="bg-slate-900/50 backdrop-blur-md border border-white/10 text-sm font-bold text-slate-200 px-4 py-2 rounded-xl outline-none hover:bg-slate-800 transition-colors flex items-center justify-between min-w-[140px]"
+        className="bg-slate-900/50 backdrop-blur-md border border-white/10 text-sm font-bold text-slate-200 px-3 sm:px-4 py-2 rounded-xl outline-none hover:bg-slate-800 transition-colors flex items-center justify-between min-w-[120px] sm:min-w-[140px]"
       >
         <span>{value || placeholder}</span>
         <svg className="w-4 h-4 text-slate-400 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
@@ -72,8 +72,8 @@ export default function AvailableDatePicker({ value, onChange, availableDates = 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-              className="absolute top-full mt-2 left-0 z-[100] bg-[#141525] border border-cyan-500/20 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] p-4 w-72 backdrop-blur-xl"
-            >
+            className="absolute top-full mt-2 left-1/2 -translate-x-1/2 sm:translate-x-0 sm:left-0 z-[100] bg-[#141525] border border-cyan-500/20 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] p-4 w-[280px] sm:w-72 backdrop-blur-xl"
+          >
               <div className="flex justify-between items-center mb-4">
                 <button type="button" onClick={prevMonth} className="text-slate-400 hover:text-white p-1">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>
