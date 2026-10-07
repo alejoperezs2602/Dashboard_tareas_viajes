@@ -4,7 +4,7 @@ import { deleteCloudDataByDate } from '../../services/fleetService.js';
 import ErrorBanner from './ErrorBanner.jsx';
 import AvailableDatePicker from './AvailableDatePicker.jsx';
 
-export default function AdminDeleteModal({ isOpen, onClose, availableDates = [] }) {
+export default function AdminDeleteModal({ isOpen, onClose, availableDates = [], onDeleted }) {
   const [date, setDate] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState(null);
@@ -27,6 +27,7 @@ export default function AdminDeleteModal({ isOpen, onClose, availableDates = [] 
       await deleteCloudDataByDate(date);
       setSuccess(`Los datos de la fecha ${date} fueron eliminados exitosamente de la nube.`);
       setDate('');
+      if (onDeleted) onDeleted();
     } catch (err) {
       console.error(err);
       setError('Ocurrió un error al intentar borrar los datos.');

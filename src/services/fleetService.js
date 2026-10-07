@@ -1,6 +1,6 @@
 import { collection, doc, writeBatch, getDoc, getDocs, query, where, setDoc } from 'firebase/firestore';
 import { db } from './firebase.js';
-import { tripToDoc, telemetryToDoc, sanitizeId, docToTrip, docToTelemetry } from './mappers.js';
+import { tripToDoc, telemetryToDocs, sanitizeId, docToTrip, docToTelemetry } from './mappers.js';
 
 const BATCH_SIZE = 400; // Firestore limit is 500
 
@@ -92,55 +92,74 @@ export async function upsertPlanillas(planillasMap, onProgress) {
  */
 export async function upsertTelemetry(telemetryVehicles, onProgress) {
   const collectionRef = collection(db, 'telemetria');
+  const resumenRef = collection(db, 'resumen_diario');
+  const uniqueDates = new Set();
   
   // We can't purely batch write if we need to read first to merge.
-  // For telemetry, we will do sequential or Promise.all read-then-write.
+  // For telemetry, we will do sequential read-then-write.
   let totalProcessed = 0;
   
   for (const veh of telemetryVehicles) {
-    const newDoc = telemetryToDoc(veh);
-    const docRef = doc(collectionRef, newDoc.id);
-    
-    try {
-      const existingSnap = await getDoc(docRef);
-      if (existingSnap.exists()) {
-        const existingData = existingSnap.data();
-        
-        // Merge points
-        const combinedPt = [...(existingData.pt || []), ...newDoc.pt];
-        
-        // Sort by time (h)
-        combinedPt.sort((a, b) => a.h.localeCompare(b.h));
-        
-        // Simple deduplication by time + lat
-        const uniquePt = [];
-        const seen = new Set();
-        for (const p of combinedPt) {
-          const key = `${p.h}_${p.la}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            uniquePt.push(p);
+    const docsPorDia = telemetryToDocs(veh);
+
+    for (const newDoc of docsPorDia) {
+      if (newDoc.fechaISO) uniqueDates.add(newDoc.fechaISO);
+      const docRef = doc(collectionRef, newDoc.id);
+      
+      try {
+        const existingSnap = await getDoc(docRef);
+        if (existingSnap.exists()) {
+          const existingData = existingSnap.data();
+          
+          // Merge points
+          const combinedPt = [...(existingData.pt || []), ...newDoc.pt];
+          
+          // Sort by time (h)
+          combinedPt.sort((a, b) => String(a.h).localeCompare(String(b.h)));
+          
+          // Simple deduplication by time + lat
+          const uniquePt = [];
+          const seen = new Set();
+          for (const p of combinedPt) {
+            const key = `${p.h}_${p.la}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              uniquePt.push(p);
+            }
           }
+          
+          // Recalculate excesses
+          const totalExcesos = uniquePt.filter(p => p.x === 1).length;
+          
+          await setDoc(docRef, {
+            ...newDoc,
+            pt: uniquePt,
+            totalExcesos
+          }, { merge: true });
+          
+        } else {
+          await setDoc(docRef, newDoc);
         }
-        
-        // Recalculate excesses
-        const totalExcesos = uniquePt.filter(p => p.x === 1).length;
-        
-        await setDoc(docRef, {
-          ...newDoc,
-          pt: uniquePt,
-          totalExcesos
-        }, { merge: true });
-        
-      } else {
-        await setDoc(docRef, newDoc);
+      } catch (err) {
+        console.warn("Failed merging telemetry for", newDoc.id, err);
       }
-    } catch (err) {
-      console.warn("Failed merging telemetry for", newDoc.id, err);
     }
     
     totalProcessed++;
     if (onProgress) onProgress(totalProcessed, telemetryVehicles.length);
+  }
+
+  // Register dates for the calendar
+  if (uniqueDates.size > 0) {
+    const summaryBatch = writeBatch(db);
+    uniqueDates.forEach(date => {
+      summaryBatch.set(doc(resumenRef, date), {
+        fechaISO: date,
+        tieneTelemetria: true,
+        actualizadoEn: new Date()
+      }, { merge: true });
+    });
+    await summaryBatch.commit();
   }
 }
 
@@ -169,7 +188,25 @@ export async function fetchHistoricalTelemetry(startISO, endISO) {
     where('fechaISO', '<=', endISO)
   );
   const snapshot = await getDocs(q);
-  return snapshot.docs.map(docSnap => docToTelemetry(docSnap.data()));
+
+  // Each doc is one vehicle-day. Merge them into one entry per vehicle
+  // (each point keeps its own 'fecha', so the date filter works correctly).
+  const byVehicle = new Map();
+  snapshot.docs.forEach(docSnap => {
+    const veh = docToTelemetry(docSnap.data());
+    if (!byVehicle.has(veh.interno)) {
+      byVehicle.set(veh.interno, { ...veh, puntos: [...veh.puntos] });
+    } else {
+      const acc = byVehicle.get(veh.interno);
+      acc.puntos.push(...veh.puntos);
+      acc.excesos = (acc.excesos || 0) + (veh.excesos || 0);
+    }
+  });
+
+  return Array.from(byVehicle.values()).map(v => ({
+    ...v,
+    puntos: v.puntos.map((p, index) => ({ ...p, index }))
+  }));
 }
 
 /**
@@ -197,6 +234,9 @@ export async function deleteCloudDataByDate(dateISO) {
   const qTelem = query(collection(db, 'telemetria'), where('fechaISO', '==', dateISO));
   const snapTelem = await getDocs(qTelem);
   snapTelem.docs.forEach(d => pushDelete(d.ref));
+
+  // Remove the calendar marker for this date
+  pushDelete(doc(db, 'resumen_diario', dateISO));
 
   for (const b of batchArray) {
     await b.commit();

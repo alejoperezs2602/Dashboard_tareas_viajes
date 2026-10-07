@@ -901,6 +901,7 @@ function App() {
         isOpen={isAdminModalOpen}
         onClose={() => setIsAdminModalOpen(false)}
         availableDates={availableDates}
+        onDeleted={() => fetchAvailableDates().then(setAvailableDates).catch(console.error)}
       />
     </div>
     </>

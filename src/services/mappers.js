@@ -87,22 +87,25 @@ export function docToTrip(doc) {
 
 /**
  * Compresses a Telemetry object for Firestore to save document size.
+ * A single file may contain several days for the same vehicle, so we split
+ * the points by date and return ONE document per vehicle per day.
  */
-export function telemetryToDoc(veh) {
-  // telemetry parser already outputs 'fecha' as DD/MM/YYYY (first point fallback)
-  // But each point has a 'fecha'. We assume a single file is a single day per vehicle for the ID.
-  const firstPointWithDate = veh.puntos.find(p => p.fecha);
-  const fechaISO = toISOFormat(firstPointWithDate ? firstPointWithDate.fecha : '') || '';
-  
-  const docId = sanitizeId(`${veh.interno}_${fechaISO}`);
+export function telemetryToDocs(veh) {
+  const byDate = new Map();
 
-  const doc = {
-    id: docId,
+  veh.puntos.forEach(p => {
+    const fechaISO = toISOFormat(p.fecha || '') || '';
+    if (!byDate.has(fechaISO)) byDate.set(fechaISO, []);
+    byDate.get(fechaISO).push(p);
+  });
+
+  return Array.from(byDate.entries()).map(([fechaISO, puntos]) => ({
+    id: sanitizeId(`${veh.interno}_${fechaISO}`),
     interno: veh.interno,
     fechaISO,
-    totalExcesos: veh.excesos || 0,
+    totalExcesos: puntos.filter(p => p.esExceso).length,
     // Compress keys to save bytes (1MiB limit per doc)
-    pt: veh.puntos.map(p => ({
+    pt: puntos.map(p => ({
       la: p.lat,
       ln: p.lng,
       v: p.velocidad,
@@ -110,9 +113,7 @@ export function telemetryToDoc(veh) {
       c: p.conductor || '',
       x: p.esExceso ? 1 : 0
     }))
-  };
-
-  return doc;
+  }));
 }
 
 /**
