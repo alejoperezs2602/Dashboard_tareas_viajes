@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-export default function AvailableDatePicker({ value, onChange, availableDates = [], placeholder = 'Seleccionar fecha' }) {
+export default function AvailableDatePicker({ value, onChange, availableDates = [], localDates = [], placeholder = 'Seleccionar fecha' }) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef(null);
   
@@ -101,7 +101,8 @@ export default function AvailableDatePicker({ value, onChange, availableDates = 
                   const dayStr = String(d).padStart(2, '0');
                   const isoDate = `${y}-${m}-${dayStr}`;
                   
-                  const hasData = availableDates.includes(isoDate);
+                  const hasCloudData = availableDates.includes(isoDate);
+                  const hasLocalData = localDates.includes(isoDate);
                   const isSelected = value === isoDate;
 
                   return (
@@ -116,10 +117,19 @@ export default function AvailableDatePicker({ value, onChange, availableDates = 
                       }`}
                     >
                       {d}
-                      {hasData && !isSelected && (
+                      
+                      {/* Punto Cyan si está en bóveda local */}
+                      {hasLocalData && !isSelected && (
+                        <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-cyan-400 rounded-full shadow-[0_0_5px_rgba(34,211,238,1)]"></div>
+                      )}
+                      
+                      {/* Punto Verde si está en nube pero NO en bóveda local */}
+                      {hasCloudData && !hasLocalData && !isSelected && (
                         <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-emerald-400 rounded-full shadow-[0_0_5px_rgba(52,211,153,1)]"></div>
                       )}
-                      {hasData && isSelected && (
+                      
+                      {/* Punto Blanco si está seleccionado y tiene algún dato */}
+                      {(hasCloudData || hasLocalData) && isSelected && (
                         <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-white rounded-full"></div>
                       )}
                     </button>
@@ -127,11 +137,17 @@ export default function AvailableDatePicker({ value, onChange, availableDates = 
                 })}
               </div>
               
-              <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
-                 <button onClick={() => { onChange(''); setIsOpen(false); }} className="text-xs font-bold text-slate-500 hover:text-white">Borrar</button>
-                 <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                    <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full shadow-[0_0_5px_rgba(52,211,153,1)]"></div>
-                    Con datos
+              <div className="mt-4 pt-4 border-t border-white/5 flex flex-col gap-2">
+                 <div className="flex items-center justify-between">
+                   <button onClick={() => { onChange(''); setIsOpen(false); }} className="text-xs font-bold text-slate-500 hover:text-white">Borrar Selección</button>
+                   <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                      <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full shadow-[0_0_5px_rgba(52,211,153,1)]"></div>
+                      En Nube
+                   </div>
+                 </div>
+                 <div className="flex items-center justify-end gap-1.5 text-xs text-slate-400">
+                    <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full shadow-[0_0_5px_rgba(34,211,238,1)]"></div>
+                    Descargado
                  </div>
               </div>
             </motion.div>

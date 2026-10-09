@@ -4,7 +4,7 @@ import { deleteCloudDataByDate } from '../../services/fleetService.js';
 import ErrorBanner from './ErrorBanner.jsx';
 import AvailableDatePicker from './AvailableDatePicker.jsx';
 
-export default function AdminDeleteModal({ isOpen, onClose, availableDates = [], onDeleted }) {
+export default function AdminDeleteModal({ isOpen, onClose, availableDates = [], localDates = [], onDeleted }) {
   const [date, setDate] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState(null);
@@ -90,6 +90,7 @@ export default function AdminDeleteModal({ isOpen, onClose, availableDates = [],
                   value={date}
                   onChange={setDate}
                   availableDates={availableDates}
+                  localDates={localDates}
                   placeholder="Seleccionar fecha a borrar"
                 />
               </div>

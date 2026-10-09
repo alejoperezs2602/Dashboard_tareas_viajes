@@ -210,6 +210,32 @@ function App() {
     return [...diasTotales].filter(iso => !diasCon.has(iso)).sort();
   }, [filteredTrips, planillasMap]);
 
+  // Extraer fechas que ya están descargadas en la sesión (bóveda local)
+  const localDates = useMemo(() => {
+    const dates = new Set();
+    allTrips.forEach(t => {
+      const d = parseCustomDate(t.fecha);
+      if (d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        dates.add(`${y}-${m}-${day}`);
+      }
+    });
+    telemetryData.forEach(v => {
+      v.puntos.forEach(p => {
+        const d = parseCustomDate(p.fecha);
+        if (d) {
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          dates.add(`${y}-${m}-${day}`);
+        }
+      });
+    });
+    return Array.from(dates);
+  }, [allTrips, telemetryData]);
+
   const filteredTelemetry = useMemo(() => {
     let start, end;
     let forceExcesosOnly = false;
@@ -763,6 +789,7 @@ function App() {
                 value={dateRange.start} 
                 onChange={val => setDateRange(prev => ({ ...prev, start: val }))}
                 availableDates={availableDates}
+                localDates={localDates}
                 placeholder="Desde"
               />
               <span className="text-slate-500">-</span>
@@ -770,6 +797,7 @@ function App() {
                 value={dateRange.end} 
                 onChange={val => setDateRange(prev => ({ ...prev, end: val }))}
                 availableDates={availableDates}
+                localDates={localDates}
                 placeholder="Hasta"
               />
             </div>
@@ -975,6 +1003,7 @@ function App() {
         isOpen={isAdminModalOpen}
         onClose={() => setIsAdminModalOpen(false)}
         availableDates={availableDates}
+        localDates={localDates}
         onDeleted={() => fetchAvailableDates().then(setAvailableDates).catch(console.error)}
       />
     </div>
