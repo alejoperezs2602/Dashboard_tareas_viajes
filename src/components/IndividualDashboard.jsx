@@ -16,7 +16,7 @@ import {
 } from 'chart.js';
 import { Bar, Line } from 'react-chartjs-2';
 import Tilt from 'react-parallax-tilt';
-import { MapContainer, TileLayer, Polyline, CircleMarker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 
 ChartJS.register(
   CategoryScale,
@@ -423,11 +423,7 @@ export default function IndividualDashboard({ allTrips, filters, setFilters, tel
                       url={MAP_TILE_URL}
                     />
                     
-                    <Polyline 
-                      positions={tripTelemetry.puntos.map(p => [p.lat, p.lng])} 
-                      {...ROUTE_POLYLINE_STYLE}
-                    />
-
+                    {/* Polyline removida porque solo se guardan excesos aislados */}
                     {tripTelemetry.excesos.map((p, idx) => (
                       <CircleMarker 
                         key={idx}

@@ -64,9 +64,8 @@ export function parseTelemetry(data) {
 
     if (point.esExceso) {
       vehiclesMap[numInterno].excesos++;
+      vehiclesMap[numInterno].puntos.push(point);
     }
-
-    vehiclesMap[numInterno].puntos.push(point);
   });
 
   // Convert Sets to Arrays and return

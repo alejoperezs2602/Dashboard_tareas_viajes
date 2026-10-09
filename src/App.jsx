@@ -238,26 +238,9 @@ function App() {
 
   const filteredTelemetry = useMemo(() => {
     let start, end;
-    let forceExcesosOnly = false;
 
     if (!dateRange.start && !dateRange.end) {
        if (telemetryData.length === 0) return telemetryData;
-       
-       let minTime = Infinity;
-       let maxTime = -Infinity;
-       
-       telemetryData.forEach(v => {
-          if (v.puntos.length > 0) {
-             const firstD = parseCustomDate(v.puntos[0].fecha);
-             const lastD = parseCustomDate(v.puntos[v.puntos.length-1].fecha);
-             if (firstD && firstD.getTime() < minTime) minTime = firstD.getTime();
-             if (lastD && lastD.getTime() > maxTime) maxTime = lastD.getTime();
-          }
-       });
-       if (minTime !== Infinity && maxTime !== -Infinity) {
-          const diffDays = Math.ceil((maxTime - minTime) / (1000 * 60 * 60 * 24)) || 1;
-          forceExcesosOnly = diffDays > 7;
-       }
     } else {
       const startYMD = dateRange.start || dateRange.end;
       const endYMD = dateRange.end || dateRange.start;
@@ -265,15 +248,12 @@ function App() {
       start = parseLocalYMD(startYMD);
       end = parseLocalYMD(endYMD);
       end.setHours(23, 59, 59, 999);
-      
-      const diffTime = Math.abs(end - start);
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
-      forceExcesosOnly = diffDays > 7;
     }
     
     return telemetryData.map(veh => {
       const filteredPuntos = veh.puntos.filter(p => {
-        if (forceExcesosOnly && !p.esExceso) return false;
+        // Optimización Extrema: Forzar SIEMPRE a mostrar solo excesos (limpia datos viejos)
+        if (!p.esExceso) return false;
         
         if (start && end) {
            const d = parseCustomDate(p.fecha);
@@ -297,7 +277,7 @@ function App() {
         excesos: excesos,
         conductores: Array.from(conductoresSet)
       };
-    }).filter(veh => veh.puntos.length > 0);
+    }).filter(veh => veh.excesos > 0); // Solo pasar vehículos que tengan infracciones
   }, [telemetryData, dateRange]);
 
   const handleDrillDown = (interno, ruta = 'ALL') => {
