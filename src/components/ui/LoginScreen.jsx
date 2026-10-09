@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../../services/firebase.js';
 import ErrorBanner from './ErrorBanner.jsx';
+import { clearAllData } from '../../utils/storage.js';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -14,6 +15,7 @@ export default function LoginScreen() {
     setLoading(true);
     setError(null);
     try {
+      await clearAllData();
       await signInWithEmailAndPassword(auth, email, password);
     } catch (err) {
       console.error(err);

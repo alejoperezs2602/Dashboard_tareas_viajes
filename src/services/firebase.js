@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, setPersistence, browserSessionPersistence } from 'firebase/auth';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -15,6 +15,9 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
+
+// Forzar que la sesión se cierre al cerrar la pestaña o el navegador
+setPersistence(auth, browserSessionPersistence).catch(console.error);
 
 // Inicializamos Firestore con caché local persistente
 export const db = initializeFirestore(app, {

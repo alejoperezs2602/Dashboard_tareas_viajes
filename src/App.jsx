@@ -211,20 +211,50 @@ function App() {
   }, [filteredTrips, planillasMap]);
 
   const filteredTelemetry = useMemo(() => {
-    if (!dateRange.start && !dateRange.end) return telemetryData;
-    
-    const startYMD = dateRange.start || dateRange.end;
-    const endYMD = dateRange.end || dateRange.start;
-    
-    const start = parseLocalYMD(startYMD);
-    const end = parseLocalYMD(endYMD);
-    end.setHours(23, 59, 59, 999);
+    let start, end;
+    let forceExcesosOnly = false;
+
+    if (!dateRange.start && !dateRange.end) {
+       if (telemetryData.length === 0) return telemetryData;
+       
+       let minTime = Infinity;
+       let maxTime = -Infinity;
+       
+       telemetryData.forEach(v => {
+          if (v.puntos.length > 0) {
+             const firstD = parseCustomDate(v.puntos[0].fecha);
+             const lastD = parseCustomDate(v.puntos[v.puntos.length-1].fecha);
+             if (firstD && firstD.getTime() < minTime) minTime = firstD.getTime();
+             if (lastD && lastD.getTime() > maxTime) maxTime = lastD.getTime();
+          }
+       });
+       if (minTime !== Infinity && maxTime !== -Infinity) {
+          const diffDays = Math.ceil((maxTime - minTime) / (1000 * 60 * 60 * 24)) || 1;
+          forceExcesosOnly = diffDays > 7;
+       }
+    } else {
+      const startYMD = dateRange.start || dateRange.end;
+      const endYMD = dateRange.end || dateRange.start;
+      
+      start = parseLocalYMD(startYMD);
+      end = parseLocalYMD(endYMD);
+      end.setHours(23, 59, 59, 999);
+      
+      const diffTime = Math.abs(end - start);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+      forceExcesosOnly = diffDays > 7;
+    }
     
     return telemetryData.map(veh => {
       const filteredPuntos = veh.puntos.filter(p => {
-        const d = parseCustomDate(p.fecha);
-        if (!d) return false;
-        return d >= start && d <= end;
+        if (forceExcesosOnly && !p.esExceso) return false;
+        
+        if (start && end) {
+           const d = parseCustomDate(p.fecha);
+           if (!d) return false;
+           if (d < start || d > end) return false;
+        }
+        return true;
       });
 
       let excesos = 0;
@@ -460,14 +490,51 @@ function App() {
       if (fetchedTrips.length === 0 && fetchedTelemetry.length === 0) {
         setError('No se encontraron registros para este rango de fechas en la nube.');
       } else {
-        // Reemplazar estado local con lo consultado
-        setAllTrips(fetchedTrips);
-        setTelemetryData(fetchedTelemetry);
-        saveData('allTrips', fetchedTrips);
-        saveData('telemetryData', fetchedTelemetry);
-        
-        // No necesitamos descargar planillas porque al guardar en Firebase,
-        // ya habíamos adjuntado el conductor a cada viaje (doc.conductoresArray).
+        // Fusionar Viajes
+        setAllTrips(prev => {
+          const map = new Map();
+          prev.forEach(t => map.set(t.viaje, t));
+          fetchedTrips.forEach(t => map.set(t.viaje, t));
+          const merged = Array.from(map.values());
+          saveData('allTrips', merged);
+          return merged;
+        });
+
+        // Fusionar Telemetría
+        setTelemetryData(prev => {
+          const byVeh = new Map();
+          const add = (list) => list.forEach(v => {
+            if (!byVeh.has(v.interno)) {
+              byVeh.set(v.interno, { ...v, puntos: [...v.puntos] });
+            } else {
+              byVeh.get(v.interno).puntos.push(...v.puntos);
+            }
+          });
+          
+          add(prev);
+          add(fetchedTelemetry);
+
+          const merged = Array.from(byVeh.values()).map(v => {
+            const uniq = new Map();
+            v.puntos.forEach(p => uniq.set(`${p.fecha}_${p.hora}_${p.lat}_${p.lng}`, p));
+            
+            const puntos = Array.from(uniq.values());
+            puntos.sort((a, b) => {
+               if (a.fecha !== b.fecha) return a.fecha.localeCompare(b.fecha);
+               return (a.hora_real || a.hora).localeCompare(b.hora_real || b.hora);
+            });
+            const puntosConIndex = puntos.map((p, i) => ({ ...p, index: i }));
+
+            return { 
+              ...v, 
+              puntos: puntosConIndex, 
+              excesos: puntosConIndex.filter(p => p.esExceso).length 
+            };
+          });
+          
+          saveData('telemetryData', merged);
+          return merged;
+        });
         
         setSyncStatus({ isSyncing: true, message: 'Descarga exitosa', subMessage: 'Mostrando historial' });
         setTimeout(() => setSyncStatus({ isSyncing: false }), 3000);
@@ -553,7 +620,10 @@ function App() {
                   <span className="text-xs font-bold text-emerald-300">{currentUser.email}</span>
                 </div>
                 <button
-                  onClick={() => signOut(auth)}
+                  onClick={async () => {
+                    await clearAllData();
+                    signOut(auth);
+                  }}
                   className="text-xs font-bold text-slate-400 hover:text-white transition-colors underline"
                 >
                   Cerrar sesión
