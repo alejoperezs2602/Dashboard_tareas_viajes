@@ -22,6 +22,7 @@ import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB } from './constants/index.js';
 import CommandPalette from './components/CommandPalette';
 import AdminDeleteModal from './components/ui/AdminDeleteModal.jsx';
 import AvailableDatePicker from './components/ui/AvailableDatePicker.jsx';
+import ExcelReportModal from './components/ui/ExcelReportModal.jsx';
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -39,6 +40,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('general');
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('Procesando archivo...');
@@ -569,6 +571,7 @@ function App() {
     goToVehicles: () => setActiveTab('individual'),
     goToTelemetry: () => setActiveTab('telemetry'),
     exportPDF: () => handleExportPDF(),
+    exportExcel: () => setIsExcelModalOpen(true),
     toggleTheme: () => setIsLightMode(!isLightMode),
     clearData: () => handleClearData()
   };
@@ -721,6 +724,18 @@ function App() {
                         </svg>
                       </span>
                       <span className="relative z-10 tracking-wide">Exportar PDF</span>
+                    </button>
+                    <button 
+                      onClick={() => setIsExcelModalOpen(true)}
+                      className="group relative flex items-center justify-center bg-emerald-500/10 backdrop-blur-2xl text-emerald-300 font-extrabold py-3 px-6 rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.15),inset_0_1px_1px_rgba(255,255,255,0.1)] transition-all hover:shadow-[0_0_35px_rgba(16,185,129,0.4),inset_0_1px_1px_rgba(255,255,255,0.3)] hover:-translate-y-1 active:translate-y-0 border border-emerald-500/30 hover:border-emerald-400/80 overflow-hidden text-sm"
+                    >
+                      <span className="absolute inset-0 bg-emerald-500/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></span>
+                      <span className="mr-2 relative z-10">
+                        <svg className="w-5 h-5 text-emerald-400 drop-shadow-md" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                      </span>
+                      <span className="relative z-10 tracking-wide">Reportes Excel</span>
                     </button>
                     <button 
                       onClick={handleClearData}
@@ -985,6 +1000,16 @@ function App() {
         availableDates={availableDates}
         localDates={localDates}
         onDeleted={() => fetchAvailableDates().then(setAvailableDates).catch(console.error)}
+      />
+      <ExcelReportModal
+        isOpen={isExcelModalOpen}
+        onClose={() => setIsExcelModalOpen(false)}
+        trips={validatedTrips}
+        telemetry={filteredTelemetry}
+        planillasMap={planillasMap}
+        dateRange={dateRange}
+        diasSinPlanillas={diasSinPlanillas}
+        currentUser={currentUser}
       />
     </div>
     </>

@@ -33,6 +33,7 @@ export default function CommandPalette({ isOpen, onClose, actions }) {
     { id: 'tab-veh', label: 'Ir a Vehículos Individuales', action: actions.goToVehicles },
     { id: 'tab-map', label: 'Ir a Mapa Telemetría GPS', action: actions.goToTelemetry },
     { id: 'action-pdf', label: 'Exportar Reporte PDF', action: actions.exportPDF },
+    { id: 'action-excel', label: 'Exportar Reportes en Excel (.xlsx)', action: actions.exportExcel },
     { id: 'action-theme', label: 'Alternar Tema Claro/Oscuro', action: actions.toggleTheme },
     { id: 'action-clear', label: 'Limpiar todos los datos', action: actions.clearData }
   ];
