@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from './services/firebase.js';
-import { upsertTrips, upsertPlanillas, upsertTelemetry, fetchHistoricalTrips, fetchHistoricalTelemetry, fetchAvailableDates } from './services/fleetService.js';
+import { upsertTrips, upsertPlanillas, upsertTelemetry, fetchHistoricalTrips, fetchHistoricalTelemetry, fetchAvailableDates, fetchUserRole, logUpload } from './services/fleetService.js';
 import LoginScreen from './components/ui/LoginScreen.jsx';
 import { parseAllTrips } from './utils/excelParser';
 import { parseTelemetry } from './utils/telemetryParser';
@@ -58,6 +58,22 @@ function App() {
     });
     return () => unsubscribe();
   }, []);
+
+  // Rol del usuario (usuarios/{uid}.rol). Sin rol asignado => 'visor'
+  const [userRole, setUserRole] = useState('visor');
+  const canUpload = userRole === 'admin' || userRole === 'operador';
+  const canDelete = userRole === 'admin';
+  const uploader = currentUser ? { uid: currentUser.uid, email: currentUser.email } : null;
+
+  useEffect(() => {
+    if (!currentUser) {
+      setUserRole('visor');
+      return;
+    }
+    let cancelled = false;
+    fetchUserRole(currentUser.uid, currentUser.email).then(r => { if (!cancelled) setUserRole(r); });
+    return () => { cancelled = true; };
+  }, [currentUser]);
 
   useEffect(() => {
     if (isLightMode) {
@@ -290,6 +306,11 @@ function App() {
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (!canUpload) {
+      setError('Tu rol (visor) no permite subir archivos.');
+      e.target.value = null;
+      return;
+    }
 
     setError('');
     if (file.size > MAX_FILE_SIZE_BYTES) {
@@ -329,7 +350,8 @@ function App() {
             setSyncStatus({ isSyncing: true, message: 'Guardando en la nube...', subMessage: 'Iniciando sincronización' });
             upsertTrips(trips, (processed, total) => {
               setSyncStatus({ isSyncing: true, message: 'Guardando en la nube...', subMessage: `${processed} de ${total} viajes guardados.` });
-            }).then(() => {
+            }, uploader).then(() => {
+              logUpload(uploader, { tipo: 'viajes', archivo: file.name, registros: trips.length });
               setSyncStatus({ isSyncing: false, message: '', subMessage: '' });
             }).catch(err => {
               console.error("Error sync trips:", err);
@@ -350,6 +372,11 @@ function App() {
   const handleTelemetryUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (!canUpload) {
+      setError('Tu rol (visor) no permite subir archivos.');
+      e.target.value = null;
+      return;
+    }
 
     setError('');
     if (file.size > MAX_FILE_SIZE_BYTES) {
@@ -386,7 +413,8 @@ function App() {
             setSyncStatus({ isSyncing: true, message: 'Subiendo telemetría...', subMessage: 'Iniciando sincronización' });
             upsertTelemetry(parsed, (processed, total) => {
               setSyncStatus({ isSyncing: true, message: 'Subiendo telemetría...', subMessage: `${processed} de ${total} vehículos combinados.` });
-            }).then(() => {
+            }, uploader).then(() => {
+              logUpload(uploader, { tipo: 'telemetria', archivo: file.name, registros: parsed.length });
               setSyncStatus({ isSyncing: false, message: '', subMessage: '' });
             }).catch(err => {
               console.error("Error sync telemetry:", err);
@@ -407,6 +435,11 @@ function App() {
   const handlePlanillasUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (!canUpload) {
+      setError('Tu rol (visor) no permite subir archivos.');
+      e.target.value = null;
+      return;
+    }
 
     setError('');
     if (file.size > MAX_FILE_SIZE_BYTES) {
@@ -441,7 +474,8 @@ function App() {
             setSyncStatus({ isSyncing: true, message: 'Subiendo planillas...', subMessage: 'Iniciando sincronización' });
             upsertPlanillas(parsed, (processed, total) => {
               setSyncStatus({ isSyncing: true, message: 'Subiendo planillas...', subMessage: `${processed} de ${total} sincronizadas.` });
-            }).then(() => {
+            }, uploader).then(() => {
+              logUpload(uploader, { tipo: 'planillas', archivo: file.name, registros: parsed.size });
               setSyncStatus({ isSyncing: false, message: '', subMessage: '' });
             }).catch(err => {
               console.error("Error sync planillas:", err);
@@ -627,6 +661,7 @@ function App() {
                 <div className="px-3 py-1 bg-emerald-500/20 border border-emerald-500/30 rounded-full flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                   <span className="text-xs font-bold text-emerald-300">{currentUser.email}</span>
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/10 text-slate-200">{userRole}</span>
                 </div>
                 <button
                   onClick={async () => {
@@ -640,6 +675,7 @@ function App() {
               </div>
             </div>
             
+            {canUpload && (
             <div className="relative z-10 w-full md:w-auto flex flex-col gap-3">
                 {/* GROUP: Datos Operativos */}
                 <div className="flex flex-col gap-2">
@@ -709,6 +745,7 @@ function App() {
                   <input type="file" accept=".xlsx, .xls" onChange={handleTelemetryUpload} className="hidden" />
                 </label>
             </div>
+            )}
 
             <div className="relative z-10 w-full md:w-auto flex flex-col sm:flex-row gap-3 mt-4 md:mt-0">
                 {allTrips.length > 0 && (
@@ -751,7 +788,7 @@ function App() {
                     </button>
                   </>
                 )}
-                {currentUser?.email?.toLowerCase() === 'sistemas@sotrauraba.com.co' && (
+                {canDelete && (
                   <button 
                     onClick={() => setIsAdminModalOpen(true)}
                     className="group relative flex items-center justify-center bg-rose-900/40 backdrop-blur-2xl text-rose-200 font-extrabold py-3 px-6 rounded-2xl shadow-[0_0_20px_rgba(225,29,72,0.2),inset_0_1px_1px_rgba(255,255,255,0.1)] transition-all hover:shadow-[0_0_40px_rgba(225,29,72,0.6),inset_0_1px_1px_rgba(255,255,255,0.3)] hover:-translate-y-1 active:translate-y-0 border border-rose-500/50 hover:border-rose-400 overflow-hidden text-sm ml-auto"

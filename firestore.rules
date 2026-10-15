@@ -1,38 +1,59 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Check if user is authenticated
+
     function signedIn() {
       return request.auth != null;
     }
-    
-    // Check if user is the administrator
+
+    // Rol del usuario: usuarios/{uid}.rol  ("admin" | "operador" | "visor").
+    // Sin documento o sin rol => visor (solo lectura).
+    function rol() {
+      return exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol
+        : 'visor';
+    }
+
+    // Cuenta principal siempre admin (evita quedarse sin acceso si falta su documento de rol)
     function isAdmin() {
-      return request.auth != null && request.auth.token.email.toLowerCase() == 'sistemas@sotrauraba.com.co';
+      return signedIn() && (
+        request.auth.token.email.lower() == 'sistemas@sotrauraba.com.co' || rol() == 'admin'
+      );
+    }
+
+    function canUpload() {
+      return signedIn() && (isAdmin() || rol() == 'operador');
+    }
+
+    // Cada usuario solo lee su propio rol; los roles se gestionan desde la consola de Firebase
+    match /usuarios/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
     }
 
     match /viajes/{viajeId} {
       allow read: if signedIn();
-      allow create, update: if signedIn();
+      allow create, update: if canUpload();
       allow delete: if isAdmin();
     }
-    
+
     match /telemetria/{telemetriaId} {
       allow read: if signedIn();
-      allow create, update: if signedIn();
+      allow create, update: if canUpload();
       allow delete: if isAdmin();
     }
-    
+
     match /resumen_diario/{fecha} {
       allow read: if signedIn();
-      allow create, update: if signedIn();
+      allow create, update: if canUpload();
       allow delete: if isAdmin();
     }
-    
+
+    // Registro de quién subió cada archivo (inmutable)
     match /cargas/{cargaId} {
-      allow read, create: if signedIn();
-      allow update, delete: if false; // Upload logs cannot be modified or deleted
+      allow read: if isAdmin();
+      allow create: if canUpload();
+      allow update, delete: if false;
     }
   }
 }

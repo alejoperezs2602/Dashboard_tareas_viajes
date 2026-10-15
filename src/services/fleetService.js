@@ -1,4 +1,4 @@
-import { collection, doc, writeBatch, getDoc, getDocs, query, where, setDoc } from 'firebase/firestore';
+import { collection, doc, writeBatch, getDoc, getDocs, query, where, setDoc, addDoc } from 'firebase/firestore';
 import { db } from './firebase.js';
 import { tripToDoc, telemetryToDocs, sanitizeId, docToTrip, docToTelemetry } from './mappers.js';
 
@@ -32,9 +32,52 @@ async function executeInBatches(items, processItemFn, onProgress) {
 }
 
 /**
+ * Campos de auditoría: quién subió el dato
+ */
+function uploaderFields(uploader) {
+  return {
+    subidoPor: uploader?.email || null,
+    subidoPorUid: uploader?.uid || null
+  };
+}
+
+/**
+ * Registra en la colección 'cargas' un log por cada archivo cargado a la nube.
+ */
+export async function logUpload(uploader, { tipo, archivo, registros }) {
+  try {
+    await addDoc(collection(db, 'cargas'), {
+      tipo,
+      archivo: archivo || null,
+      registros: registros || 0,
+      usuario: uploader?.email || null,
+      uid: uploader?.uid || null,
+      fecha: new Date()
+    });
+  } catch (err) {
+    console.warn('No se pudo registrar la subida:', err);
+  }
+}
+
+/**
+ * Obtiene el rol del usuario desde usuarios/{uid}. Sin rol asignado => 'visor'.
+ */
+export async function fetchUserRole(uid, email) {
+  if (email && email.toLowerCase() === 'sistemas@sotrauraba.com.co') return 'admin';
+  try {
+    const snap = await getDoc(doc(db, 'usuarios', uid));
+    const rol = snap.exists() ? snap.data().rol : null;
+    return ['admin', 'operador', 'visor'].includes(rol) ? rol : 'visor';
+  } catch (err) {
+    console.warn('No se pudo obtener el rol, se asigna visor:', err);
+    return 'visor';
+  }
+}
+
+/**
  * Upsert Trips
  */
-export async function upsertTrips(trips, onProgress) {
+export async function upsertTrips(trips, onProgress, uploader) {
   const collectionRef = collection(db, 'viajes');
   const resumenRef = collection(db, 'resumen_diario');
   const uniqueDates = new Set();
@@ -48,6 +91,7 @@ export async function upsertTrips(trips, onProgress) {
     
     batch.set(docRef, {
       ...docData,
+      ...uploaderFields(uploader),
       actualizadoEn: new Date()
     }, { merge: true });
   }, onProgress);
@@ -70,7 +114,7 @@ export async function upsertTrips(trips, onProgress) {
  * Upsert Planillas
  * planillasMap is a Map<viajeId, conductor>
  */
-export async function upsertPlanillas(planillasMap, onProgress) {
+export async function upsertPlanillas(planillasMap, onProgress, uploader) {
   const collectionRef = collection(db, 'viajes');
   const entries = Array.from(planillasMap.entries());
   
@@ -82,6 +126,8 @@ export async function upsertPlanillas(planillasMap, onProgress) {
     // We only update the 'planilla' field, or create a skeleton if trip doesn't exist yet
     batch.set(docRef, {
       planilla: { conductor },
+      planillaSubidaPor: uploader?.email || null,
+      planillaSubidaPorUid: uploader?.uid || null,
       actualizadoEn: new Date()
     }, { merge: true });
   }, onProgress);
@@ -90,7 +136,7 @@ export async function upsertPlanillas(planillasMap, onProgress) {
 /**
  * Upsert Telemetry (merge points if doc already exists)
  */
-export async function upsertTelemetry(telemetryVehicles, onProgress) {
+export async function upsertTelemetry(telemetryVehicles, onProgress, uploader) {
   const collectionRef = collection(db, 'telemetria');
   const resumenRef = collection(db, 'resumen_diario');
   const uniqueDates = new Set();
@@ -133,12 +179,13 @@ export async function upsertTelemetry(telemetryVehicles, onProgress) {
           
           await setDoc(docRef, {
             ...newDoc,
+            ...uploaderFields(uploader),
             pt: uniquePt,
             totalExcesos
           }, { merge: true });
           
         } else {
-          await setDoc(docRef, newDoc);
+          await setDoc(docRef, { ...newDoc, ...uploaderFields(uploader) });
         }
       } catch (err) {
         console.warn("Failed merging telemetry for", newDoc.id, err);
