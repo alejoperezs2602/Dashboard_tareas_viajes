@@ -9,7 +9,6 @@ import { parseTelemetry } from './utils/telemetryParser';
 import { parsePlanillas } from './utils/planillasParser';
 import { parseCustomDate } from './utils/dateUtils.js';
 import { saveData, loadData, clearAllData } from './utils/storage.js';
-import { generateReport } from './utils/pdfExport.js';
 import GeneralDashboard from './components/GeneralDashboard';
 import IndividualDashboard from './components/IndividualDashboard';
 import TelemetryDashboard from './components/TelemetryDashboard';
@@ -503,14 +502,6 @@ function App() {
     setGlobalFilters({ ruta: 'ALL', conductor: 'ALL', interno: 'ALL', viajeIndex: '' });
   };
 
-  const handleExportPDF = () => {
-    if (allTrips.length === 0) {
-      setError('No hay datos para exportar. Cargue un archivo primero.');
-      return;
-    }
-    generateReport(allTrips, telemetryData);
-  };
-
   const handleFetchCloud = async () => {
     if (!dateRange.start && !dateRange.end) {
       setError('Por favor, selecciona una fecha inicial o final para consultar.');
@@ -604,7 +595,6 @@ function App() {
     goToGeneral: () => setActiveTab('general'),
     goToVehicles: () => setActiveTab('individual'),
     goToTelemetry: () => setActiveTab('telemetry'),
-    exportPDF: () => handleExportPDF(),
     exportExcel: () => setIsExcelModalOpen(true),
     toggleTheme: () => setIsLightMode(!isLightMode),
     clearData: () => handleClearData()
@@ -750,18 +740,6 @@ function App() {
             <div className="relative z-10 w-full md:w-auto flex flex-col sm:flex-row gap-3 mt-4 md:mt-0">
                 {allTrips.length > 0 && (
                   <>
-                    <button 
-                      onClick={handleExportPDF}
-                      className="group relative flex items-center justify-center bg-white/5 backdrop-blur-2xl text-white font-extrabold py-3 px-6 rounded-2xl shadow-[0_0_20px_rgba(255,255,255,0.05),inset_0_1px_1px_rgba(255,255,255,0.2)] transition-all hover:shadow-[0_0_30px_rgba(255,255,255,0.2),inset_0_1px_1px_rgba(255,255,255,0.4)] hover:-translate-y-1 active:translate-y-0 border border-white/20 hover:border-white/50 overflow-hidden text-sm"
-                    >
-                      <span className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></span>
-                      <span className="mr-2 relative z-10">
-                        <svg className="w-5 h-5 text-slate-200 drop-shadow-md" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                        </svg>
-                      </span>
-                      <span className="relative z-10 tracking-wide">Exportar PDF</span>
-                    </button>
                     <button 
                       onClick={() => setIsExcelModalOpen(true)}
                       className="group relative flex items-center justify-center bg-emerald-500/10 backdrop-blur-2xl text-emerald-300 font-extrabold py-3 px-6 rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.15),inset_0_1px_1px_rgba(255,255,255,0.1)] transition-all hover:shadow-[0_0_35px_rgba(16,185,129,0.4),inset_0_1px_1px_rgba(255,255,255,0.3)] hover:-translate-y-1 active:translate-y-0 border border-emerald-500/30 hover:border-emerald-400/80 overflow-hidden text-sm"
@@ -958,35 +936,110 @@ function App() {
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col items-center justify-center mt-20 text-center space-y-8"
+            className="flex flex-col items-center justify-center mt-12 text-center"
           >
-            <div className="glass-panel p-10 rounded-[2.5rem] max-w-2xl w-full relative overflow-hidden border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-400/10 blur-3xl rounded-full -mt-20 -mr-20 pointer-events-none"></div>
-              
-              <h2 className="text-3xl font-extrabold text-slate-100 mb-2">Bienvenido al Centro de Control</h2>
-              <p className="text-slate-400 text-lg mb-10">Sigue estos pasos para comenzar a visualizar los datos de tu flota.</p>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10">
-                <div className="flex flex-col items-center p-4 bg-slate-800/40 rounded-2xl border border-white/5 relative">
-                  <div className="w-12 h-12 bg-blue-500/20 text-blue-400 rounded-full flex items-center justify-center font-black text-xl mb-3 border border-blue-500/30">1</div>
-                  <h3 className="font-bold text-slate-200 mb-2">Sube Tareas</h3>
-                  <p className="text-sm text-slate-500">Carga el archivo de rutas (Tareas y Viajes) en la barra superior.</p>
+            <div className="glass-panel p-8 md:p-12 rounded-[2.5rem] max-w-4xl w-full relative overflow-hidden border border-white/10 shadow-[0_25px_60px_rgba(0,0,0,0.35)]">
+              {/* Efectos de luz decorativos */}
+              <div className="absolute -top-24 -right-24 w-72 h-72 bg-cyan-500/10 blur-3xl rounded-full pointer-events-none"></div>
+              <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-indigo-500/10 blur-3xl rounded-full pointer-events-none"></div>
+
+              {/* Encabezado */}
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-400/20 text-cyan-300 text-xs font-extrabold uppercase tracking-widest mb-4">
+                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                Centro de Control e Inteligencia Operativa
+              </div>
+
+              <h2 className="text-3xl md:text-4xl font-extrabold text-slate-100 tracking-tight mb-3">
+                Bienvenido al Panel de Control de Flota
+              </h2>
+              <p className="text-slate-400 text-base md:text-lg max-w-2xl mx-auto mb-10 leading-relaxed">
+                Consulta el historial almacenado en la nube o carga nuevos reportes operativos para analizar tiempos, recorridos y seguridad vial.
+              </p>
+
+              {/* Pasos principales */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10 text-left">
+                {/* Paso 1: Consultar Nube */}
+                <div className="group flex flex-col justify-between p-6 bg-slate-800/40 hover:bg-slate-800/60 rounded-3xl border border-white/10 hover:border-emerald-400/40 transition-all duration-300">
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="w-11 h-11 bg-emerald-500/15 text-emerald-400 rounded-2xl flex items-center justify-center border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.15)]">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                        </svg>
+                      </div>
+                      <span className="text-[11px] font-black uppercase tracking-wider text-emerald-400/80 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                        Opción A · Nube
+                      </span>
+                    </div>
+                    <h3 className="font-extrabold text-slate-100 text-lg mb-2">1. Consulta el Historial</h3>
+                    <p className="text-sm text-slate-400 leading-relaxed">
+                      Elige un rango de fechas en la barra superior (los días con <span className="text-emerald-400 font-bold">punto verde</span> tienen datos) y pulsa <strong className="text-slate-200">Consultar Nube</strong>.
+                    </p>
+                  </div>
+                  <div className="mt-4 pt-3 border-t border-white/5 text-xs font-bold text-emerald-300/90 flex items-center gap-1.5">
+                    <span>{availableDates.length > 0 ? `${availableDates.length} fecha(s) disponibles en nube` : 'Sincronizado con la nube'}</span>
+                  </div>
                 </div>
-                <div className="flex flex-col items-center p-4 bg-slate-800/40 rounded-2xl border border-white/5 relative">
-                  <div className="w-12 h-12 bg-rose-500/20 text-rose-400 rounded-full flex items-center justify-center font-black text-xl mb-3 border border-rose-500/30">2</div>
-                  <h3 className="font-bold text-slate-200 mb-2">Sube GPS</h3>
-                  <p className="text-sm text-slate-500">Carga el archivo de velocidad excesiva para análisis de seguridad.</p>
+
+                {/* Paso 2: Cargar Archivos */}
+                <div className="group flex flex-col justify-between p-6 bg-slate-800/40 hover:bg-slate-800/60 rounded-3xl border border-white/10 hover:border-cyan-400/40 transition-all duration-300">
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="w-11 h-11 bg-cyan-500/15 text-cyan-400 rounded-2xl flex items-center justify-center border border-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.15)]">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                        </svg>
+                      </div>
+                      <span className="text-[11px] font-black uppercase tracking-wider text-cyan-400/80 bg-cyan-500/10 px-2.5 py-1 rounded-full border border-cyan-500/20">
+                        Opción B · Carga
+                      </span>
+                    </div>
+                    <h3 className="font-extrabold text-slate-100 text-lg mb-2">2. Sube Datos Operativos</h3>
+                    <p className="text-sm text-slate-400 leading-relaxed">
+                      En <strong className="text-slate-200">Datos Operativos</strong> carga <em>Tareas y Viajes</em> junto a <em>Planillas</em> (para cruzar conductores), y en <strong className="text-slate-200">Velocidad Excesiva</strong> el reporte GPS.
+                    </p>
+                  </div>
+                  <div className="mt-4 pt-3 border-t border-white/5 text-xs font-bold text-cyan-300/90">
+                    {canUpload ? 'Guardado automático en la nube' : 'Disponible para rol Operador / Admin'}
+                  </div>
                 </div>
-                <div className="flex flex-col items-center p-4 bg-slate-800/40 rounded-2xl border border-white/5 relative">
-                  <div className="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center font-black text-xl mb-3 border border-emerald-500/30">3</div>
-                  <h3 className="font-bold text-slate-200 mb-2">Explora</h3>
-                  <p className="text-sm text-slate-500">Obtén alertas, puntajes y mapas interactivos automáticamente.</p>
+
+                {/* Paso 3: Analizar y Exportar */}
+                <div className="group flex flex-col justify-between p-6 bg-slate-800/40 hover:bg-slate-800/60 rounded-3xl border border-white/10 hover:border-indigo-400/40 transition-all duration-300">
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="w-11 h-11 bg-indigo-500/15 text-indigo-400 rounded-2xl flex items-center justify-center border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.15)]">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <span className="text-[11px] font-black uppercase tracking-wider text-indigo-400/80 bg-indigo-500/10 px-2.5 py-1 rounded-full border border-indigo-500/20">
+                        Paso Final
+                      </span>
+                    </div>
+                    <h3 className="font-extrabold text-slate-100 text-lg mb-2">3. Analiza y Exporta</h3>
+                    <p className="text-sm text-slate-400 leading-relaxed">
+                      Explora indicadores de puntualidad, viajes por vehículo y mapas GPS, o descarga reportes gerenciales en <strong className="text-slate-200">Excel (.xlsx)</strong>.
+                    </p>
+                  </div>
+                  <div className="mt-4 pt-3 border-t border-white/5 text-xs font-bold text-indigo-300/90">
+                    Reportes listos con un clic
+                  </div>
                 </div>
               </div>
-              
-              <div className="mt-10 pt-6 border-t border-white/5 flex items-center justify-center gap-2 text-slate-500 text-sm">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-                Privacidad total: Tus datos se procesan localmente y nunca salen de tu navegador.
+
+              {/* Pie informativo */}
+              <div className="mt-8 pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4 text-slate-400 text-xs font-medium">
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                  <span>Respaldo seguro en la nube corporativa y memoria caché local para consultas rápidas.</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-slate-400">
+                  <span>Atajo rápido:</span>
+                  <kbd className="px-2 py-0.5 text-[11px] font-bold bg-slate-800 text-slate-200 rounded border border-white/15">Ctrl + K</kbd>
+                </div>
               </div>
             </div>
           </motion.div>

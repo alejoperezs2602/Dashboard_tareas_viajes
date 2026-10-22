@@ -285,6 +285,7 @@ export default function GeneralDashboard({ allTrips, onDrillDown, telemetryData 
 
   const doughnutOptions = {
     responsive: true,
+    maintainAspectRatio: false,
     cutout: '70%',
     onClick: (e, elements) => {
       if (elements.length > 0) {
@@ -298,7 +299,7 @@ export default function GeneralDashboard({ allTrips, onDrillDown, telemetryData 
       event.native.target.style.cursor = chartElement[0] ? 'pointer' : 'default';
     },
     plugins: {
-      legend: { position: 'bottom', labels: { font: { family: "'Outfit', sans-serif" }, padding: 20 } },
+      legend: { display: false },
       tooltip: {
         backgroundColor: 'rgba(15, 23, 42, 0.9)',
         titleFont: { family: "'Outfit', sans-serif", size: 13 },
@@ -565,17 +566,48 @@ export default function GeneralDashboard({ allTrips, onDrillDown, telemetryData 
         <div className="glass-panel p-8 rounded-[2.5rem] flex flex-col h-[480px]">
           {effViewMode === 'GLOBAL' ? (
             <>
-              <div className="mb-6 border-b border-slate-300/30 pb-4">
+              <div className="mb-4 border-b border-slate-300/30 pb-3">
                  <h3 className="text-2xl font-extrabold text-slate-100 drop-shadow-sm">Eficiencia Global</h3>
                  <p className="text-sm font-medium text-slate-400/80">Clic en un color para ver detalles por puesto</p>
               </div>
-              <div className="w-full max-w-sm mx-auto flex-1 flex items-center justify-center relative min-h-0">
-                 <Doughnut data={effData} options={doughnutOptions} />
-                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none mt-[-20px]">
-                    <span className="text-5xl font-black text-slate-100 drop-shadow-md">
-                       {Math.round((stats.efficiency.antes + stats.efficiency.tiempo) / Math.max(1, (stats.efficiency.antes + stats.efficiency.tiempo + stats.efficiency.tarde)) * 100)}%
-                    </span>
-                    <span className="text-xs font-bold text-slate-300 uppercase tracking-widest mt-1">Efectividad</span>
+              <div className="w-full max-w-sm mx-auto flex-1 flex flex-col items-center justify-center min-h-0">
+                 {/* Dona con centro matematicamente perfecto */}
+                 <div className="relative w-full h-[220px] flex items-center justify-center">
+                    <Doughnut data={effData} options={doughnutOptions} />
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none">
+                       <span className="text-4xl md:text-5xl font-black text-slate-100 drop-shadow-md leading-none">
+                          {Math.round((stats.efficiency.antes + stats.efficiency.tiempo) / Math.max(1, (stats.efficiency.antes + stats.efficiency.tiempo + stats.efficiency.tarde)) * 100)}%
+                       </span>
+                       <span className="text-[11px] font-bold text-slate-300 uppercase tracking-widest mt-1.5">
+                          Efectividad
+                       </span>
+                    </div>
+                 </div>
+
+                 {/* Leyenda visualmente balanceada y clickable */}
+                 <div className="flex flex-col gap-2 mt-3 items-center">
+                    <button 
+                      type="button"
+                      onClick={() => setEffViewMode('ANTES')}
+                      className="flex items-center gap-3 text-xs font-bold text-slate-300 hover:text-emerald-400 transition-colors cursor-pointer group"
+                      title="Ver puestos con llegadas antes de tiempo"
+                    >
+                      <span className="w-7 h-3 rounded-sm bg-[#10b981] shadow-sm shrink-0 group-hover:scale-105 transition-transform"></span>
+                      <span>Llegada Antes (&lt; -{PUNCTUALITY_TOLERANCE_MIN} min)</span>
+                    </button>
+                    <div className="flex items-center gap-3 text-xs font-bold text-slate-300">
+                      <span className="w-7 h-3 rounded-sm bg-[#cbd5e1] shadow-sm shrink-0"></span>
+                      <span>A Tiempo (±{PUNCTUALITY_TOLERANCE_MIN} min)</span>
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={() => setEffViewMode('TARDE')}
+                      className="flex items-center gap-3 text-xs font-bold text-slate-300 hover:text-rose-400 transition-colors cursor-pointer group"
+                      title="Ver puestos con retrasos"
+                    >
+                      <span className="w-7 h-3 rounded-sm bg-[#ef4444] shadow-sm shrink-0 group-hover:scale-105 transition-transform"></span>
+                      <span>Retraso (&gt; PUNCTUALITY_TOLERANCE_MIN min)</span>
+                    </button>
                  </div>
               </div>
             </>
