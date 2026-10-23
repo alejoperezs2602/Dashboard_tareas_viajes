@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
 import Tilt from 'react-parallax-tilt';
 import { SPEED_LIMIT_KMH, DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM, MAP_TILE_URL, MAP_ATTRIBUTION, SPEEDING_MARKER_STYLE, ROUTE_POLYLINE_STYLE } from '../constants/index.js';
-import { timeToMs } from '../utils/dateUtils.js';
+import { timeToMs, matchDate } from '../utils/dateUtils.js';
 import SearchableSelect from './ui/SearchableSelect.jsx';
 
 function MapController({ targetPoint }) {
@@ -35,7 +35,7 @@ const fetchAddress = async (lat, lng) => {
   }
 };
 
-export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
+export default function TelemetryDashboard({ telemetryData, allTrips = [], rawTrips = [], planillasMap = null }) {
   const [selectedInterno, setSelectedInterno] = useState('');
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -59,62 +59,114 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
   const reportData = useMemo(() => {
     if (!selectedVehicleData || selectedVehicleData.excesos === 0) return [];
     
-    // Enrich each alert with the corresponding trip from allTrips
+    const tripsPool = allTrips.length > 0 ? allTrips : rawTrips;
+
+    const getTripConductor = (trip) => {
+      if (!trip) return { name: null, source: null };
+      const id = String(trip.viaje ?? '').trim();
+      if (planillasMap && planillasMap.has(id) && String(planillasMap.get(id)).trim()) {
+        return { name: String(planillasMap.get(id)).trim(), source: 'Planilla' };
+      }
+      if (trip.planilla && trip.planilla.conductor && String(trip.planilla.conductor).trim()) {
+        return { name: String(trip.planilla.conductor).trim(), source: 'Planilla' };
+      }
+      if (trip.conductoresArray && trip.conductoresArray[0] && String(trip.conductoresArray[0]).trim()) {
+        return { name: String(trip.conductoresArray[0]).trim(), source: 'Viaje' };
+      }
+      const ptCond = (trip.puntos || []).find(pt => pt.conductor && String(pt.conductor).trim());
+      if (ptCond) {
+        return { name: String(ptCond.conductor).trim(), source: 'Viaje' };
+      }
+      return { name: null, source: null };
+    };
+
+    // Enrich each alert with the corresponding trip and driver from Planillas / allTrips
     return selectedVehicleData.puntos.filter(p => p.esExceso).map(alert => {
       let matchedTripLabel = 'Sin viaje registrado';
+      let matchedTrip = null;
+      let fueraDeHorario = false;
       
-      if (allTrips.length > 0) {
-        // Match by internal number and date
-        const possibleTrips = allTrips.filter(t => 
-          String(t.interno) === String(selectedVehicleData.interno) && 
-          t.fecha === alert.fecha
+      // Search in validatedTrips first, fallback to rawTrips if needed
+      let possibleTrips = tripsPool.filter(t => 
+        String(t.interno).trim() === String(selectedVehicleData.interno).trim() && 
+        matchDate(t.fecha, alert.fecha)
+      );
+      if (possibleTrips.length === 0 && rawTrips.length > 0 && tripsPool !== rawTrips) {
+        possibleTrips = rawTrips.filter(t => 
+          String(t.interno).trim() === String(selectedVehicleData.interno).trim() && 
+          matchDate(t.fecha, alert.fecha)
         );
+      }
+      
+      if (possibleTrips.length > 0) {
+        const alertTimeMs = timeToMs(alert.hora);
+        let exactTrip = null;
+        let closestTrip = possibleTrips[0];
+        let minDistanceMs = Infinity;
         
-        if (possibleTrips.length > 0) {
-          const alertTimeMs = timeToMs(alert.hora);
-          let exactTrip = null;
-          
-          for (const trip of possibleTrips) {
-            if (trip.puntos && trip.puntos.length > 0) {
-              const firstPoint = trip.puntos[0];
-              const lastPoint = trip.puntos[trip.puntos.length - 1];
-              
-              const startStr = firstPoint.hora_real || firstPoint.hora_est;
-              const endStr = lastPoint.hora_real || lastPoint.hora_est;
-              
-              const startMs = timeToMs(startStr);
-              const endMs = timeToMs(endStr);
-              
-              // 30 min buffer before and after route
-              const BUFFER_MS = 30 * 60 * 1000; 
-              
-              if (startMs <= endMs) {
-                // Normal route (doesn't cross midnight)
-                if (alertTimeMs >= (startMs - BUFFER_MS) && alertTimeMs <= (endMs + BUFFER_MS)) {
-                  exactTrip = trip;
-                  break;
-                }
-              } else {
-                // Route crosses midnight
-                if (alertTimeMs >= (startMs - BUFFER_MS) || alertTimeMs <= (endMs + BUFFER_MS)) {
-                  exactTrip = trip;
-                  break;
-                }
+        for (const trip of possibleTrips) {
+          if (trip.puntos && trip.puntos.length > 0) {
+            const firstPoint = trip.puntos[0];
+            const lastPoint = trip.puntos[trip.puntos.length - 1];
+            
+            const startStr = firstPoint.hora_real || firstPoint.hora_est;
+            const endStr = lastPoint.hora_real || lastPoint.hora_est;
+            
+            const startMs = timeToMs(startStr);
+            const endMs = timeToMs(endStr);
+            
+            // 30 min buffer before and after route
+            const BUFFER_MS = 30 * 60 * 1000; 
+            
+            if (startMs <= endMs) {
+              // Normal route (doesn't cross midnight)
+              if (alertTimeMs >= (startMs - BUFFER_MS) && alertTimeMs <= (endMs + BUFFER_MS)) {
+                exactTrip = trip;
+                break;
+              }
+              const dist = Math.min(Math.abs(alertTimeMs - startMs), Math.abs(alertTimeMs - endMs));
+              if (dist < minDistanceMs) {
+                minDistanceMs = dist;
+                closestTrip = trip;
+              }
+            } else {
+              // Route crosses midnight
+              if (alertTimeMs >= (startMs - BUFFER_MS) || alertTimeMs <= (endMs + BUFFER_MS)) {
+                exactTrip = trip;
+                break;
               }
             }
           }
-          
-          if (exactTrip) {
-            matchedTripLabel = `${exactTrip.viaje} | ${exactTrip.ruta}`;
-          } else {
-            // Fallback to the first route of the day, but indicate it occurred outside the recorded schedule
-            matchedTripLabel = `${possibleTrips[0].viaje} | ${possibleTrips[0].ruta} (Fuera de horario)`;
-          }
+        }
+        
+        if (exactTrip) {
+          matchedTrip = exactTrip;
+          matchedTripLabel = `${exactTrip.viaje} | ${exactTrip.ruta}`;
+        } else {
+          matchedTrip = closestTrip;
+          fueraDeHorario = true;
+          matchedTripLabel = `${closestTrip.viaje} | ${closestTrip.ruta} (Fuera de horario)`;
         }
       }
-      return { ...alert, viajeStr: matchedTripLabel };
+
+      const { name: tripCond, source: condSource } = getTripConductor(matchedTrip);
+      const gpsCond = alert.conductor && String(alert.conductor).trim().toUpperCase() !== 'DESCONOCIDO'
+        ? String(alert.conductor).trim()
+        : 'SIN IDENTIFICAR';
+
+      const conductorFinal = tripCond || gpsCond;
+      const fuenteConductor = tripCond ? condSource : 'GPS';
+      const rutaFinal = matchedTrip ? `${matchedTrip.viaje} · ${matchedTrip.ruta}${fueraDeHorario ? ' (Fuera de horario)' : ''}` : null;
+
+      return { 
+        ...alert, 
+        conductorFinal,
+        fuenteConductor,
+        rutaFinal,
+        viajeStr: matchedTripLabel 
+      };
     });
-  }, [selectedVehicleData, allTrips]);
+  }, [selectedVehicleData, allTrips, rawTrips, planillasMap]);
 
   // Si hay un vehículo seleccionado, calculamos el centro inicial del mapa
   const mapCenter = useMemo(() => {
@@ -258,27 +310,46 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
              </div>
              
              <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
-                {selectedVehicleData.excesos > 0 ? (
+                {reportData.length > 0 ? (
                   <div className="space-y-3">
-                    {selectedVehicleData.puntos.filter(p => p.esExceso).map((p, idx) => {
+                    {reportData.map((p, idx) => {
                       const isSelected = selectedAlert && selectedAlert[0] === p.lat && selectedAlert[1] === p.lng;
                       return (
                         <div 
                           key={idx} 
                           onClick={() => setSelectedAlert([p.lat, p.lng])}
-                          className={`flex justify-between items-center p-4 rounded-2xl border transition-all duration-300 group relative overflow-hidden cursor-pointer ${
+                          className={`flex justify-between items-start p-4 rounded-2xl border transition-all duration-300 group relative overflow-hidden cursor-pointer ${
                             isSelected 
                               ? 'bg-rose-500/20 border-rose-400 shadow-[0_0_20px_rgba(244,63,94,0.3)]' 
                               : 'bg-slate-800/40 border-white/10 hover:bg-slate-700/60 hover:shadow-[0_8px_20px_rgba(244,63,94,0.15)]'
                           }`}
                         >
                           <div className={`absolute left-0 top-0 bottom-0 w-1 shadow-[0_0_10px_rgba(244,63,94,0.8)] ${isSelected ? 'bg-white' : 'bg-rose-500'}`}></div>
-                          <div className="pl-3">
-                            <span className={`${isSelected ? 'text-white drop-shadow-md' : 'text-rose-400'} font-black block text-xl tracking-wide transition-colors`}>{p.velocidad} km/h</span>
-                            <span className="text-xs font-bold text-slate-300 mt-1 block">Cond: <span className="text-white">{p.conductor}</span></span>
-                            <span className="text-[10px] font-bold text-rose-300/70">{p.fecha} - {p.hora}</span>
+                          <div className="pl-3 min-w-0 flex-1 pr-2">
+                            <div className="flex items-center gap-2">
+                              <span className={`${isSelected ? 'text-white drop-shadow-md' : 'text-rose-400'} font-black text-xl tracking-wide transition-colors`}>{p.velocidad} km/h</span>
+                              {p.fuenteConductor === 'Planilla' && (
+                                <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                  Planilla
+                                </span>
+                              )}
+                              {p.fuenteConductor === 'Viaje' && (
+                                <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                                  Viaje
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs font-bold text-slate-300 mt-1 block truncate" title={p.conductorFinal}>
+                              Cond: <span className="text-white">{p.conductorFinal}</span>
+                            </span>
+                            {p.rutaFinal && (
+                              <span className="text-[11px] font-bold text-cyan-300/90 mt-0.5 block truncate" title={p.rutaFinal}>
+                                Ruta: {p.rutaFinal}
+                              </span>
+                            )}
+                            <span className="text-[10px] font-bold text-rose-300/70 mt-0.5 block">{p.fecha} - {p.hora}</span>
                           </div>
-                          <div className="text-right">
+                          <div className="text-right shrink-0">
                             <span className="text-[11px] font-bold text-slate-400 block tracking-wider">Lat: {p.lat.toFixed(4)}</span>
                             <span className="text-[11px] font-bold text-slate-400 block tracking-wider">Lng: {p.lng.toFixed(4)}</span>
                           </div>
@@ -314,7 +385,7 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
               
               
               {/* Puntos de exceso de velocidad */}
-              {selectedVehicleData.puntos.filter(p => p.esExceso).map((p, idx) => {
+              {reportData.map((p, idx) => {
                 const isSelected = selectedAlert && selectedAlert[0] === p.lat && selectedAlert[1] === p.lng;
                 
                 return (
@@ -329,9 +400,11 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
                     radius={isSelected ? SPEEDING_MARKER_STYLE.radius * 1.5 : SPEEDING_MARKER_STYLE.radius}
                   >
                     <Popup className="font-sans font-bold">
-                      <div className="text-center">
-                        <p className="text-rose-600 text-lg mb-1">{p.velocidad} km/h</p>
-                        <p className="text-xs text-slate-500">Conductor: {p.conductor}</p>
+                      <div className="text-center space-y-0.5">
+                        <p className="text-rose-600 text-lg font-black">{p.velocidad} km/h</p>
+                        <p className="text-xs text-slate-700 font-bold">Conductor: {p.conductorFinal}</p>
+                        {p.rutaFinal && <p className="text-[11px] text-indigo-600 font-semibold">{p.rutaFinal}</p>}
+                        <p className="text-[10px] text-slate-400">{p.fecha} · {p.hora}</p>
                       </div>
                     </Popup>
                   </CircleMarker>
@@ -345,7 +418,7 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
 
       {/* Hidden Report for Export */}
       <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
-        <div ref={reportRef} className="w-[950px] bg-white p-10 rounded-3xl border border-slate-200 flex flex-col gap-6 text-slate-800">
+        <div ref={reportRef} className="w-[1050px] bg-white p-10 rounded-3xl border border-slate-200 flex flex-col gap-6 text-slate-800">
           <div className="border-b border-slate-200 pb-6 flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight flex items-center">
@@ -367,6 +440,7 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
                   <tr className="text-slate-500 border-b border-slate-300">
                     <th className="pb-3 font-bold uppercase">Fecha y Hora</th>
                     <th className="pb-3 font-bold uppercase">Velocidad</th>
+                    <th className="pb-3 font-bold uppercase">Conductor</th>
                     <th className="pb-3 font-bold uppercase">Ubicación Aproximada</th>
                     <th className="pb-3 font-bold uppercase text-right">Viaje / Ruta</th>
                   </tr>
@@ -379,6 +453,9 @@ export default function TelemetryDashboard({ telemetryData, allTrips = [] }) {
                       </td>
                       <td className="py-3 whitespace-nowrap">
                         <span className="text-rose-600 font-black text-base">{p.velocidad} km/h</span>
+                      </td>
+                      <td className="py-3 text-slate-800 font-bold text-xs pr-4">
+                        {p.conductorFinal}
                       </td>
                       <td className="py-3 text-slate-600 text-xs pr-4 font-medium">
                         {resolvedAddresses[idx] || `${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`}

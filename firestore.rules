@@ -6,28 +6,46 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Rol del usuario: usuarios/{uid}.rol  ("admin" | "operador" | "visor").
-    // Sin documento o sin rol => visor (solo lectura).
+    function extractRolFromDoc(data) {
+      return ('rol' in data && data.rol is string)
+        ? data.rol.lower()
+        : (('Rol' in data && data.Rol is string)
+          ? data.Rol.lower()
+          : (('role' in data && data.role is string) ? data.role.lower() : 'visor'));
+    }
+
+    // Rol del usuario desde usuarios/{uid} o usuarios/{email}, insensible a mayúsculas/minúsculas.
     function rol() {
       return exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
-        ? get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol
-        : 'visor';
+        ? extractRolFromDoc(get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data)
+        : (exists(/databases/$(database)/documents/usuarios/$(request.auth.token.email.lower()))
+          ? extractRolFromDoc(get(/databases/$(database)/documents/usuarios/$(request.auth.token.email.lower())).data)
+          : (exists(/databases/$(database)/documents/usuarios/$(request.auth.token.email))
+            ? extractRolFromDoc(get(/databases/$(database)/documents/usuarios/$(request.auth.token.email)).data)
+            : 'visor'));
     }
 
     // Cuenta principal siempre admin (evita quedarse sin acceso si falta su documento de rol)
     function isAdmin() {
       return signedIn() && (
-        request.auth.token.email.lower() == 'sistemas@sotrauraba.com.co' || rol() == 'admin'
+        request.auth.token.email.lower() == 'sistemas@sotrauraba.com.co' ||
+        rol() == 'admin' ||
+        rol() == 'administrador'
       );
     }
 
     function canUpload() {
-      return signedIn() && (isAdmin() || rol() == 'operador');
+      return signedIn() && (
+        isAdmin() ||
+        rol() == 'operador' ||
+        rol() == 'operario' ||
+        rol() == 'operaciones'
+      );
     }
 
-    // Cada usuario solo lee su propio rol; los roles se gestionan desde la consola de Firebase
-    match /usuarios/{uid} {
-      allow read: if signedIn() && request.auth.uid == uid;
+    // Lectura permitida a usuarios autenticados para resolver su rol (por uid, email o campo)
+    match /usuarios/{userId} {
+      allow read: if signedIn();
       allow write: if false;
     }
 

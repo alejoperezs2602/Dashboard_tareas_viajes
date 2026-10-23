@@ -1,7 +1,8 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { timeToMs, matchDate } from '../utils/dateUtils.js';
-import { SPEED_LIMIT_KMH, PUNCTUALITY_TOLERANCE_MIN, DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM, MAP_TILE_URL, MAP_ATTRIBUTION, SPEEDING_MARKER_STYLE, ROUTE_POLYLINE_STYLE } from '../constants/index.js';
+import { PUNCTUALITY_TOLERANCE_MIN } from '../constants/index.js';
 import SearchableSelect from './ui/SearchableSelect.jsx';
+import TripReplayPlayer from './TripReplayPlayer.jsx';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -16,7 +17,6 @@ import {
 } from 'chart.js';
 import { Bar, Line } from 'react-chartjs-2';
 import Tilt from 'react-parallax-tilt';
-import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 
 ChartJS.register(
   CategoryScale,
@@ -95,15 +95,16 @@ export default function IndividualDashboard({ allTrips, filters, setFilters, tel
     if (!trip || !telemetryData || telemetryData.length === 0) return null;
     
     // Find the vehicle's telemetry
-    const vehTelemetry = telemetryData.find(td => td.interno === trip.interno);
+    const vehTelemetry = telemetryData.find(td => String(td.interno) === String(trip.interno));
     if (!vehTelemetry) return null;
 
     let pts = vehTelemetry.puntos;
     let crossReferenced = false;
     
     if (trip.fecha && trip.puntos && trip.puntos.length > 0) {
-      const startMs = timeToMs(trip.puntos[0].hora_real);
-      const endMs = timeToMs(trip.puntos[trip.puntos.length - 1].hora_real);
+      const startMs = timeToMs(trip.puntos[0].hora_real || trip.puntos[0].hora_est);
+      const endMs = timeToMs(trip.puntos[trip.puntos.length - 1].hora_real || trip.puntos[trip.puntos.length - 1].hora_est);
+      const BUFFER_MS = 30 * 60 * 1000;
 
       const matchRango = pts.filter(p => {
         if (!matchDate(p.fecha, trip.fecha)) return false;
@@ -111,7 +112,7 @@ export default function IndividualDashboard({ allTrips, filters, setFilters, tel
         
         const pMs = timeToMs(p.hora);
         if (startMs <= endMs) {
-          return pMs >= startMs && pMs <= endMs;
+          return pMs >= (startMs - BUFFER_MS) && pMs <= (endMs + BUFFER_MS);
         } else {
           return true; // Fallback medianoche
         }
@@ -137,14 +138,6 @@ export default function IndividualDashboard({ allTrips, filters, setFilters, tel
       excesos: excesos
     };
   }, [trip, telemetryData]);
-
-  const teleMapCenter = useMemo(() => {
-    if (tripTelemetry && tripTelemetry.puntos.length > 0) {
-      const mid = Math.floor(tripTelemetry.puntos.length / 2);
-      return [tripTelemetry.puntos[mid].lat, tripTelemetry.puntos[mid].lng];
-    }
-    return DEFAULT_MAP_CENTER;
-  }, [tripTelemetry]);
 
   const chartData = useMemo(() => {
     if (!trip) return null;
@@ -309,6 +302,9 @@ export default function IndividualDashboard({ allTrips, filters, setFilters, tel
             />
           </div>
 
+          {/* Reproductor Interactivo del Viaje ("Modo Replay GPS vs. Reloj") */}
+          <TripReplayPlayer trip={trip} tripTelemetry={tripTelemetry} />
+
           {/* Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="glass-panel p-8 rounded-[2.5rem]">
@@ -387,64 +383,6 @@ export default function IndividualDashboard({ allTrips, filters, setFilters, tel
               </table>
             </div>
           </div>
-
-          {/* Timeline Híbrido / Mini-Mapa GPS */}
-          {tripTelemetry && (
-            <div className="glass-panel p-8 rounded-[2.5rem] mt-8 relative overflow-hidden">
-               <div className="absolute top-0 right-10 w-32 h-1.5 bg-gradient-to-l from-rose-500 to-indigo-600 rounded-b-xl opacity-80"></div>
-               <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between border-b border-slate-300/30 pb-4">
-                 <div>
-                   <h3 className="text-2xl font-extrabold text-slate-100 drop-shadow-sm flex items-center">
-                     <span className="w-4 h-4 bg-indigo-500 rounded-full mr-3 shadow-sm"></span>
-                     Timeline Híbrido de Riesgo
-                   </h3>
-                   <p className="text-sm font-medium text-slate-400/80 mt-1">
-                      Telemetría de velocidad &gt; {SPEED_LIMIT_KMH} km/h para el Vehículo #{trip.interno}
-                     {tripTelemetry.crossReferenced ? ' (Sincronizado con fecha de este viaje)' : ' (Contexto Histórico)'}
-                   </p>
-                 </div>
-                 {tripTelemetry.excesos.length > 0 && (
-                   <div className="mt-4 md:mt-0 px-4 py-2 bg-rose-500/20 border border-rose-500/30 text-rose-400 font-bold rounded-xl flex items-center">
-                      <svg className="w-5 h-5 mr-2 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-                      {tripTelemetry.excesos.length} Infracciones (&gt; {SPEED_LIMIT_KMH} km/h)
-                   </div>
-                 )}
-               </div>
-
-               <div className="h-[350px] w-full rounded-[1.5rem] overflow-hidden shadow-inner border border-white/50 relative z-0">
-                  <MapContainer 
-                    key={`${trip.interno}-${trip.fecha || 'historico'}`} 
-                    center={teleMapCenter} 
-                    zoom={DEFAULT_MAP_ZOOM} 
-                    style={{ height: '100%', width: '100%' }}
-                  >
-                    <TileLayer
-                      attribution={MAP_ATTRIBUTION}
-                      url={MAP_TILE_URL}
-                    />
-                    
-                    {/* Polyline removida porque solo se guardan excesos aislados */}
-                    {tripTelemetry.excesos.map((p, idx) => (
-                      <CircleMarker 
-                        key={idx}
-                        center={[p.lat, p.lng]} 
-                        pathOptions={SPEEDING_MARKER_STYLE} 
-                        radius={SPEEDING_MARKER_STYLE.radius}
-                      >
-                        <Popup className="font-sans font-bold">
-                          <div className="text-center">
-                            <p className="text-rose-600 text-lg mb-1">{p.velocidad} km/h</p>
-                            {p.fecha && <p className="text-xs text-slate-500">{p.fecha} {p.hora}</p>}
-                          </div>
-                        </Popup>
-                      </CircleMarker>
-                    ))}
-                  </MapContainer>
-               </div>
-
-               {/* Timeline Cronológico Vertical Removido a petición del usuario */}
-            </div>
-          )}
         </div>
       )}
     </div>

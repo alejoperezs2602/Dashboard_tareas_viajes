@@ -894,7 +894,23 @@ export async function exportExcelReport({ trips, telemetry, planillasMap, dateRa
   const buffer = await wb.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const suffix = filtros.vehiculo && filtros.vehiculo !== 'ALL' ? `_Int${filtros.vehiculo}` : (filtros.conductor && filtros.conductor !== 'ALL' ? '_Conductor' : '');
-  const fileName = `Reporte_Flota_${isoDate(inicio) || 'sin-fecha'}${startIso !== endIso ? `_a_${isoDate(fin)}` : ''}${suffix}.xlsx`;
+
+  // Nombre según cantidad de reportes: si es 1 individual toma su nombre; si son 2 o más, 'Reporte_Flota'
+  const activeReports = [];
+  if (reportes.conductores) activeReports.push('conductores');
+  if (reportes.kilometraje) activeReports.push('kilometraje');
+  if (reportes.excesos) activeReports.push('excesos');
+
+  let reportPrefix = 'Reporte_Flota';
+  if (activeReports.length === 1) {
+    const single = activeReports[0];
+    if (single === 'kilometraje') reportPrefix = 'Reporte_Kilometraje';
+    else if (single === 'conductores') reportPrefix = 'Reporte_Viajes_Conductor';
+    else if (single === 'excesos') reportPrefix = 'Reporte_Excesos_Velocidad';
+  }
+
+  const datePart = `${isoDate(inicio) || 'sin-fecha'}${startIso !== endIso ? `_a_${isoDate(fin)}` : ''}`;
+  const fileName = `${reportPrefix}_${datePart}${suffix}.xlsx`;
 
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

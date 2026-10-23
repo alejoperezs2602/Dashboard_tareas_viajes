@@ -32,10 +32,11 @@ export default function CommandPalette({ isOpen, onClose, actions }) {
     { id: 'tab-gen', label: 'Ir a Dashboard General', action: actions.goToGeneral },
     { id: 'tab-veh', label: 'Ir a Vehículos Individuales', action: actions.goToVehicles },
     { id: 'tab-map', label: 'Ir a Mapa Telemetría GPS', action: actions.goToTelemetry },
+    { id: 'action-cloud', label: 'Abrir Calendario de Cobertura y Auditoría Nube', action: actions.openCloudAudit },
     { id: 'action-excel', label: 'Exportar Reportes en Excel (.xlsx)', action: actions.exportExcel },
     { id: 'action-theme', label: 'Alternar Tema Claro/Oscuro', action: actions.toggleTheme },
     { id: 'action-clear', label: 'Limpiar todos los datos', action: actions.clearData }
-  ];
+  ].filter(item => typeof item.action === 'function');
 
   const filteredItems = items.filter(item => item.label.toLowerCase().includes(search.toLowerCase()));
 
